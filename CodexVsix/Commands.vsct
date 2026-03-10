@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable">
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+
+  <Commands package="guidCodexPackage">
+    <Groups>
+      <Group guid="guidCodexCommandSet" id="MyMenuGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_VIEW" />
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidCodexCommandSet" id="ShowCodexToolWindowCommand" priority="0x0100" type="Button">
+        <Parent guid="guidCodexCommandSet" id="MyMenuGroup" />
+        <Icon guid="guidImages" id="bmpPic1" />
+        <Strings>
+          <ButtonText>Codex</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+
+    <Bitmaps>
+      <Bitmap guid="guidImages" href="Resources\Images.png" usedList="bmpPic1" />
+    </Bitmaps>
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidCodexPackage" value="{A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61}" />
+    <GuidSymbol name="guidCodexCommandSet" value="{B6A6996F-D0BE-4D45-9C77-CE4A3ED3D8D8}">
+      <IDSymbol name="MyMenuGroup" value="0x1020" />
+      <IDSymbol name="ShowCodexToolWindowCommand" value="0x0100" />
+    </GuidSymbol>
+    <GuidSymbol name="guidImages" value="{7BC2A5B9-7BC4-44AD-BF73-4D8C4634D7A7}">
+      <IDSymbol name="bmpPic1" value="1" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>

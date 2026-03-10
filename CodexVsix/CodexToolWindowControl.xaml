@@ -1,0 +1,1341 @@
+<UserControl x:Class="CodexVsix.CodexToolWindowControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="clr-namespace:CodexVsix.UI"
+             xmlns:themes="clr-namespace:Microsoft.VisualStudio.PlatformUI;assembly=Microsoft.VisualStudio.Shell.15.0"
+             mc:Ignorable="d">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <ui:PathToFileNameConverter x:Key="PathToFileNameConverter" />
+
+        <Geometry x:Key="PaperclipIcon">M224.6 12.8c56.2-56.2 147.4-56.2 203.6 0s56.2 147.4 0 203.6l-164 164c-34.4 34.4-90.1 34.4-124.5 0s-34.4-90.1 0-124.5L292.5 103.3c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3L185 301.3c-9.4 9.4-9.4 24.6 0 33.9s24.6 9.4 33.9 0l164-164c31.2-31.2 31.2-81.9 0-113.1s-81.9-31.2-113.1 0l-164 164c-53.1 53.1-53.1 139.2 0 192.3s139.2 53.1 192.3 0L428.3 284.3c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3L343.4 459.6c-78.1 78.1-204.7 78.1-282.8 0s-78.1-204.7 0-282.8l164-164z</Geometry>
+        <Geometry x:Key="HistoryIcon">M48 106.7L48 56c0-13.3-10.7-24-24-24S0 42.7 0 56L0 168c0 13.3 10.7 24 24 24l112 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-55.3 0c37-57.8 101.7-96 175.3-96 114.9 0 208 93.1 208 208S370.9 464 256 464c-42.5 0-81.9-12.7-114.7-34.5-11-7.3-25.9-4.3-33.3 6.7s-4.3 25.9 6.7 33.3c40.5 26.8 89.1 42.5 141.3 42.5 141.4 0 256-114.6 256-256S397.4 0 256 0C170.3 0 94.4 42.1 48 106.7zM256 128c-13.3 0-24 10.7-24 24l0 104c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65 0-94.1c0-13.3-10.7-24-24-24z</Geometry>
+        <Geometry x:Key="SettingsIcon">M195.1 9.5C198.1-5.3 211.2-16 226.4-16l59.8 0c15.2 0 28.3 10.7 31.3 25.5L332 79.5c14.1 6 27.3 13.7 39.3 22.8l67.8-22.5c14.4-4.8 30.2 1.2 37.8 14.4l29.9 51.8c7.6 13.2 4.9 29.8-6.5 39.9L447 233.3c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l53.4 47.5c11.4 10.1 14 26.8 6.5 39.9l-29.9 51.8c-7.6 13.1-23.4 19.2-37.8 14.4l-67.8-22.5c-12.1 9.1-25.3 16.7-39.3 22.8l-14.4 69.9c-3.1 14.9-16.2 25.5-31.3 25.5l-59.8 0c-15.2 0-28.3-10.7-31.3-25.5l-14.4-69.9c-14.1-6-27.2-13.7-39.3-22.8L73.5 432.3c-14.4 4.8-30.2-1.2-37.8-14.4L5.8 366.1c-7.6-13.2-4.9-29.8 6.5-39.9l53.4-47.5c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7L12.3 185.8c-11.4-10.1-14-26.8-6.5-39.9L35.7 94.1c7.6-13.2 23.4-19.2 37.8-14.4l67.8 22.5c12.1-9.1 25.3-16.7 39.3-22.8L195.1 9.5zM256.3 336a80 80 0 1 0 -.6-160 80 80 0 1 0 .6 160z</Geometry>
+        <Geometry x:Key="SendIcon">M214.6 17.4c-12.5-12.5-32.8-12.5-45.3 0l-160 160c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 117.3 160 488c0 17.7 14.3 32 32 32s32-14.3 32-32l0-370.7 105.4 105.4c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3l-160-160z</Geometry>
+        <Geometry x:Key="ClipboardIcon">M320 32l-8.6 0C300.4 12.9 279.7 0 256 0L128 0C104.3 0 83.6 12.9 72.6 32L64 32C28.7 32 0 60.7 0 96L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-352c0-35.3-28.7-64-64-64zM136 112c-13.3 0-24-10.7-24-24s10.7-24 24-24l112 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-112 0z</Geometry>
+        <Geometry x:Key="BoltIcon">M338.8-9.9c11.9 8.6 16.3 24.2 10.9 37.8L271.3 224 416 224c13.5 0 25.5 8.4 30.1 21.1s.7 26.9-9.6 35.5l-288 240c-11.3 9.4-27.4 9.9-39.3 1.3s-16.3-24.2-10.9-37.8L176.7 288 32 288c-13.5 0-25.5-8.4-30.1-21.1s-.7-26.9 9.6-35.5l288-240c11.3-9.4 27.4-9.9 39.3-1.3z</Geometry>
+        <Geometry x:Key="BarsIcon">M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z</Geometry>
+        <Geometry x:Key="FolderIcon">M64 400l384 0c8.8 0 16-7.2 16-16l0-240c0-8.8-7.2-16-16-16l-149.3 0c-17.3 0-34.2-5.6-48-16L212.3 83.2c-2.8-2.1-6.1-3.2-9.6-3.2L64 80c-8.8 0-16 7.2-16 16l0 288c0 8.8 7.2 16 16 16zm384 48L64 448c-35.3 0-64-28.7-64-64L0 96C0 60.7 28.7 32 64 32l138.7 0c13.8 0 27.3 4.5 38.4 12.8l38.4 28.8c5.5 4.2 12.3 6.4 19.2 6.4L448 80c35.3 0 64 28.7 64 64l0 240c0 35.3-28.7 64-64 64z</Geometry>
+        <Geometry x:Key="ShieldIcon">M256 0c4.6 0 9.2 1 13.4 2.9L457.8 82.8c22 9.3 38.4 31 38.3 57.2-.5 99.2-41.3 280.7-213.6 363.2-16.7 8-36.1 8-52.8 0-172.4-82.5-213.1-264-213.6-363.2-.1-26.2 16.3-47.9 38.3-57.2L242.7 2.9C246.9 1 251.4 0 256 0zm0 66.8l0 378.1c138-66.8 175.1-214.8 176-303.4l-176-74.6 0 0z</Geometry>
+        <Geometry x:Key="WarningIcon">M256 0c14.7 0 28.2 8.1 35.2 21l216 400c6.7 12.4 6.4 27.4-.8 39.5S486.1 480 472 480L40 480c-14.1 0-27.2-7.4-34.4-19.5s-7.5-27.1-.8-39.5l216-400c7-12.9 20.5-21 35.2-21zm0 352a32 32 0 1 0 0 64 32 32 0 1 0 0-64zm0-192c-18.2 0-32.7 15.5-31.4 33.7l7.4 104c.9 12.5 11.4 22.3 23.9 22.3 12.6 0 23-9.7 23.9-22.3l7.4-104c1.3-18.2-13.1-33.7-31.4-33.7z</Geometry>
+        <Geometry x:Key="CloseIcon">M55.1 73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L147.2 256 9.9 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192.5 301.3 329.9 438.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.8 256 375.1 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192.5 210.7 55.1 73.4z</Geometry>
+        <Geometry x:Key="CheckIcon">M434.8 70.1c14.3 10.4 17.5 30.4 7.1 44.7l-256 352c-5.5 7.6-14 12.3-23.4 13.1s-18.5-2.7-25.1-9.3l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l101.5 101.5 234-321.7c10.4-14.3 30.4-17.5 44.7-7.1z</Geometry>
+        <Geometry x:Key="BanIcon">M367.2 412.5L99.5 144.8c-22.4 31.4-35.5 69.8-35.5 111.2 0 106 86 192 192 192 41.5 0 79.9-13.1 111.2-35.5zm45.3-45.3c22.4-31.4 35.5-69.8 35.5-111.2 0-106-86-192-192-192-41.5 0-79.9 13.1-111.2 35.5L412.5 367.2zM0 256a256 256 0 1 1 512 0 256 256 0 1 1 -512 0z</Geometry>
+
+        <SolidColorBrush x:Key="WindowBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBackgroundColorKey}}" />
+        <SolidColorBrush x:Key="PanelBrushSoft" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBackgroundColorKey}}" />
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBorderColorKey}}" />
+        <SolidColorBrush x:Key="PanelBorderSoftBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.PanelBorderColorKey}}" />
+        <SolidColorBrush x:Key="InputBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBackgroundColorKey}}" />
+        <SolidColorBrush x:Key="InputBorderBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.PanelBorderColorKey}}" />
+        <SolidColorBrush x:Key="ChipBrush" Color="#15FFFFFF" />
+        <SolidColorBrush x:Key="PopupBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.CommandBarMenuBackgroundGradientBeginColorKey}}" />
+        <SolidColorBrush x:Key="PopupItemHoverBrush" Color="#1FFFFFFF" />
+        <SolidColorBrush x:Key="PopupItemSelectedBrush" Color="#59FFFFFF" />
+        <SolidColorBrush x:Key="SidebarItemHoverBrush" Color="#1FFFFFFF" />
+        <SolidColorBrush x:Key="SidebarItemSelectedBrush" Color="#59FFFFFF" />
+        <SolidColorBrush x:Key="EventCardBrush" Color="#14FFFFFF" />
+        <SolidColorBrush x:Key="EventCardBorderBrush" Color="#22FFFFFF" />
+        <SolidColorBrush x:Key="EventDetailBrush" Color="#10FFFFFF" />
+        <SolidColorBrush x:Key="UserBubbleBrush" Color="#1EFFFFFF" />
+        <SolidColorBrush x:Key="SendButtonBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.CommandBarHoverColorKey}}" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowTextColorKey}}" />
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.PanelTextColorKey}}" />
+        <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.SystemGrayTextColorKey}}" />
+        <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.PanelHyperlinkColorKey}}" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.PanelHyperlinkColorKey}}" />
+
+        <Style x:Key="MiniButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="7,5,10,5" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource PopupItemHoverBrush}" />
+                    <Setter Property="BorderBrush" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="TopIconButtonStyle" TargetType="Button" BasedOn="{StaticResource MiniButtonStyle}">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Opacity" Value="0.82" />
+        </Style>
+
+        <Style x:Key="IconButtonStyle" TargetType="Button" BasedOn="{StaticResource TopIconButtonStyle}">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style x:Key="ChipButtonStyle" TargetType="Button" BasedOn="{StaticResource MiniButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource ChipBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ChipToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="Background" Value="{StaticResource ChipBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="ToggleBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ToggleBorder" Property="Background" Value="{StaticResource PopupItemHoverBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ToggleBorder" Property="Background" Value="{StaticResource PopupItemSelectedBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SendButtonStyle" TargetType="Button" BasedOn="{StaticResource ChipButtonStyle}">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Background" Value="{StaticResource SendButtonBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="ApprovalActionButtonStyle" TargetType="Button" BasedOn="{StaticResource ChipButtonStyle}">
+            <Setter Property="MinWidth" Value="120" />
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="Background" Value="{StaticResource PopupItemHoverBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        </Style>
+
+        <Style x:Key="AttachmentRemoveButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Background" Value="#B3181A20" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style x:Key="PopupComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Margin="4,2"
+                                Padding="12,10"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14">
+                            <ContentPresenter VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource PopupItemHoverBrush}" />
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="Transparent" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource PopupItemSelectedBrush}" />
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="Transparent" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SidebarListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14"
+                                Padding="10,9">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource SidebarItemHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource SidebarItemSelectedBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="InlineComboStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="10,0,14,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource PopupComboBoxItemStyle}" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="ComboSurface"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="14">
+                                <Grid Margin="{TemplateBinding Padding}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Margin="0,0,12,0"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                               Foreground="{TemplateBinding Foreground}"
+                                               FontSize="{TemplateBinding FontSize}"
+                                               Text="{Binding SelectionBoxItem, RelativeSource={RelativeSource TemplatedParent}}"
+                                               TextTrimming="CharacterEllipsis"
+                                               IsHitTestVisible="False" />
+                                    <Path Grid.Column="1"
+                                          Width="10"
+                                          Height="6"
+                                          Margin="0,0,6,0"
+                                          VerticalAlignment="Center"
+                                          Data="M 1,1 L 5,5 L 9,1"
+                                          Stroke="{TemplateBinding Foreground}"
+                                          StrokeThickness="1.4"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          IsHitTestVisible="False" />
+                                </Grid>
+                            </Border>
+
+                            <ToggleButton x:Name="DropDownToggle"
+                                          Background="Transparent"
+                                          BorderBrush="Transparent"
+                                          BorderThickness="0"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   PopupAnimation="Fade">
+                                <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        Margin="0,8,0,0"
+                                        Padding="6"
+                                        Background="{StaticResource PopupBrush}"
+                                        BorderBrush="{StaticResource PanelBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="14">
+                                    <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="Popup" Property="MinHeight" Value="28" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ComboSurface" Property="Background" Value="{StaticResource PopupItemHoverBrush}" />
+                                <Setter TargetName="ComboSurface" Property="BorderBrush" Value="Transparent" />
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="ComboSurface" Property="Background" Value="{StaticResource PopupItemSelectedBrush}" />
+                                <Setter TargetName="ComboSurface" Property="BorderBrush" Value="Transparent" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PanelTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="{StaticResource InputBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PanelComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource InlineComboStyle}">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="{StaticResource InputBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="10,6" />
+        </Style>
+
+        <Style x:Key="ComposerTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource PanelTextBoxStyle}">
+            <Setter Property="Background" Value="{StaticResource InputBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource WindowBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0"
+                Margin="8,8,0,8"
+                Padding="8,10"
+                Width="{Binding SidebarWidth}"
+                Background="{StaticResource PanelBrushSoft}"
+                BorderBrush="{StaticResource PanelBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsSidebarExpanded}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel>
+                    <Button Width="32"
+                            Height="32"
+                            HorizontalAlignment="Left"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTip="{Binding Localization.HistoryTooltip}"
+                            Command="{Binding ToggleHistoryPanelCommand}">
+                        <Viewbox Width="14" Height="14">
+                            <Path Data="{StaticResource HistoryIcon}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Stretch="Uniform"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="0"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round" />
+                        </Viewbox>
+                    </Button>
+                    <Button Width="32"
+                            Height="32"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Left"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTip="{Binding Localization.SettingsTooltip}"
+                            Command="{Binding ToggleSettingsPanelCommand}">
+                        <Viewbox Width="14" Height="14">
+                            <Path Data="{StaticResource SettingsIcon}"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  Stretch="Uniform" />
+                        </Viewbox>
+                    </Button>
+                </StackPanel>
+
+                <Grid Grid.Row="1"
+                      Margin="0,14,0,0"
+                      Visibility="{Binding IsSidebarExpanded, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Border Padding="10"
+                            Background="Transparent"
+                            Visibility="{Binding ShowHistoryPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding Localization.TopicsTitle}" />
+                                <Button DockPanel.Dock="Right"
+                                        Style="{StaticResource MiniButtonStyle}"
+                                        Content="{Binding Localization.NewTopicButton}"
+                                        Command="{Binding NewThreadCommand}" />
+                            </DockPanel>
+
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding Threads}"
+                                     SelectedItem="{Binding SelectedThread}"
+                                     ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{StaticResource TextSecondaryBrush}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding Title}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Row="1"
+                                                       Margin="0,4,0,0"
+                                                       Foreground="{StaticResource TextMutedBrush}"
+                                                       FontSize="11"
+                                                       Text="{Binding Subtitle}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <StackPanel Grid.Row="2"
+                                        Margin="0,10,0,0"
+                                        Orientation="Horizontal">
+                                <TextBox Width="186"
+                                         Style="{StaticResource PanelTextBoxStyle}"
+                                         Text="{Binding RenameThreadName, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="{Binding Localization.RenameTopicPlaceholder}" />
+                                <Button Margin="8,0,0,0"
+                                        Style="{StaticResource MiniButtonStyle}"
+                                        Content="{Binding Localization.RenameTopicButton}"
+                                        Command="{Binding RenameThreadCommand}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Padding="10"
+                            Background="Transparent"
+                            Visibility="{Binding ShowSettingsPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Margin="0,0,0,10"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding Localization.SettingsTitle}" />
+
+                                <TextBlock Margin="0,0,0,4"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           Text="{Binding Localization.ExecutableLabel}" />
+                                <TextBox Margin="0,0,0,10"
+                                         Style="{StaticResource PanelTextBoxStyle}"
+                                         Text="{Binding Settings.CodexExecutablePath, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Margin="0,0,0,4"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           Text="{Binding Localization.WorkingDirectoryLabel}" />
+                                <TextBox Margin="0,0,0,10"
+                                         Style="{StaticResource PanelTextBoxStyle}"
+                                         Text="{Binding Settings.WorkingDirectory, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Margin="0,0,0,4"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           Text="{Binding Localization.VerbosityLabel}" />
+                                <ComboBox Margin="0,0,0,10"
+                                          Style="{StaticResource PanelComboBoxStyle}"
+                                          ItemsSource="{Binding VerbosityOptions}"
+                                          DisplayMemberPath="Label"
+                                          SelectedValuePath="Value"
+                                          SelectedValue="{Binding SelectedVerbosity, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Margin="0,0,0,4"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           Text="{Binding Localization.ApprovalPolicyLabel}" />
+                                <ComboBox Margin="0,0,0,10"
+                                          Style="{StaticResource PanelComboBoxStyle}"
+                                          ItemsSource="{Binding ApprovalPolicyOptions}"
+                                          DisplayMemberPath="Label"
+                                          SelectedValuePath="Value"
+                                          SelectedValue="{Binding SelectedApprovalPolicy, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Margin="0,0,0,4"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           Text="{Binding Localization.RawOutputLabel}" />
+                                <TextBox Style="{StaticResource PanelTextBoxStyle}"
+                                         MinHeight="140"
+                                         FontFamily="Consolas"
+                                         AcceptsReturn="True"
+                                         IsReadOnly="True"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Text="{Binding Output}" />
+
+                                <TextBlock Margin="0,12,0,4"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           Text="{Binding Localization.AppsTitle}" />
+                                <ItemsControl ItemsSource="{Binding Apps}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,0,8">
+                                                <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                                           Text="{Binding Name}" />
+                                                <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                                           FontSize="11"
+                                                           Text="{Binding Description}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Margin="0,12,0,4"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           Text="{Binding Localization.McpServersTitle}" />
+                                <ItemsControl ItemsSource="{Binding McpServers}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,0,8">
+                                                <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                                           Text="{Binding Name}" />
+                                                <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                                           FontSize="11"
+                                                           Text="{Binding AuthStatus}" />
+                                                <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                                           FontSize="11"
+                                                           Text="{Binding ToolsLabel}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Button Grid.Column="1"
+                Panel.ZIndex="10"
+                Width="36"
+                Height="28"
+                Margin="14,10,0,0"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Command="{Binding ToggleHistoryPanelCommand}">
+            <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource TopIconButtonStyle}">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsSidebarExpanded}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Button.Style>
+            <Viewbox Width="14" Height="14">
+                <Path Data="{StaticResource BarsIcon}"
+                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                      Stretch="Uniform" />
+            </Viewbox>
+        </Button>
+
+        <Grid Grid.Column="1" Margin="14,10,14,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Messages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="Bubble"
+                                        MaxWidth="540"
+                                        Margin="0,0,0,26"
+                                        Padding="0"
+                                        HorizontalAlignment="Left"
+                                        Background="Transparent"
+                                        BorderThickness="0">
+                                    <StackPanel>
+                                        <TextBlock x:Name="EventTitle"
+                                                   Margin="0,0,0,8"
+                                                   Foreground="{StaticResource TextMutedBrush}"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding Title}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextWrapping="NoWrap"
+                                                   Visibility="Collapsed" />
+                                        <TextBlock x:Name="BubbleText"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   FontSize="13"
+                                                   LineHeight="20"
+                                                   Text="{Binding Text}"
+                                                   TextWrapping="Wrap" />
+                                        <Border x:Name="EventDetailHost"
+                                                Margin="0,10,0,0"
+                                                Padding="10,8"
+                                                Background="{StaticResource EventDetailBrush}"
+                                                BorderBrush="{StaticResource PanelBorderSoftBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                Visibility="Collapsed">
+                                            <TextBlock x:Name="EventDetailText"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       FontFamily="Consolas"
+                                                       FontSize="11"
+                                                       LineHeight="17"
+                                                       Text="{Binding Detail}"
+                                                       TextWrapping="Wrap" />
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding HasTitle}" Value="True">
+                                        <Setter TargetName="EventTitle" Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding HasDetail}" Value="True">
+                                        <Setter TargetName="EventDetailHost" Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                        <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right" />
+                                        <Setter TargetName="Bubble" Property="Background" Value="{StaticResource UserBubbleBrush}" />
+                                        <Setter TargetName="Bubble" Property="Padding" Value="14,11" />
+                                        <Setter TargetName="Bubble" Property="CornerRadius" Value="16" />
+                                        <Setter TargetName="Bubble" Property="Margin" Value="0,0,8,26" />
+                                        <Setter TargetName="BubbleText" Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsUser}" Value="False">
+                                        <Setter TargetName="Bubble" Property="Margin" Value="34,34,96,26" />
+                                        <Setter TargetName="BubbleText" Property="FontSize" Value="14" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsEvent}" Value="True">
+                                        <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch" />
+                                        <Setter TargetName="Bubble" Property="MaxWidth" Value="680" />
+                                        <Setter TargetName="Bubble" Property="Background" Value="{StaticResource EventCardBrush}" />
+                                        <Setter TargetName="Bubble" Property="BorderBrush" Value="{StaticResource EventCardBorderBrush}" />
+                                        <Setter TargetName="Bubble" Property="BorderThickness" Value="1" />
+                                        <Setter TargetName="Bubble" Property="Padding" Value="14,12" />
+                                        <Setter TargetName="Bubble" Property="CornerRadius" Value="14" />
+                                        <Setter TargetName="Bubble" Property="Margin" Value="34,4,96,18" />
+                                        <Setter TargetName="BubbleText" Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+                                        <Setter TargetName="BubbleText" Property="FontSize" Value="12" />
+                                        <Setter TargetName="BubbleText" Property="LineHeight" Value="18" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Border Grid.Row="1"
+                        Margin="0,0,0,8"
+                        Padding="10"
+                        Background="{StaticResource PanelBrushSoft}"
+                        BorderBrush="{StaticResource PanelBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Visibility="{Binding HasMentionSuggestions, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ListBox ItemsSource="{Binding MentionSuggestions}"
+                                 SelectedItem="{Binding SelectedMention}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Foreground="{StaticResource TextSecondaryBrush}" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource MiniButtonStyle}"
+                                Content="{Binding Localization.InsertButton}"
+                                Command="{Binding InsertSelectedMentionCommand}" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="1"
+                    Padding="0"
+                    Background="{StaticResource InputBrush}"
+                    BorderBrush="{StaticResource InputBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="20">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="16,14,16,2">
+                        <TextBox x:Name="PromptTextBox"
+                                 Style="{StaticResource ComposerTextBoxStyle}"
+                                 MinHeight="66"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 BorderThickness="0"
+                                 Text="{Binding Prompt, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,4,70,0"
+                                   VerticalAlignment="Top"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   FontSize="12"
+                                   IsHitTestVisible="False"
+                                   Text="{Binding Localization.ComposerPlaceholder}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=PromptTextBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+
+                    <Grid Grid.Row="1" Margin="16,10,16,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Width="32"
+                                    Height="32"
+                                    Margin="0,0,8,0"
+                                    Style="{StaticResource IconButtonStyle}"
+                                    ToolTip="{Binding Localization.AddAttachmentTooltip}"
+                                    Command="{Binding AddImageFileCommand}">
+                                <Viewbox Width="14" Height="14">
+                                    <Path Data="{StaticResource PaperclipIcon}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          Stretch="Uniform" />
+                                </Viewbox>
+                            </Button>
+                            <Border Margin="0,0,8,0"
+                                    Background="{StaticResource ChipBrush}"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="0"
+                                    CornerRadius="14">
+                                <Grid>
+                                    <ComboBox MinWidth="150"
+                                              Padding="34,0,14,0"
+                                              Style="{StaticResource InlineComboStyle}"
+                                              Foreground="{StaticResource TextPrimaryBrush}"
+                                              ItemsSource="{Binding ModelOptions}"
+                                              DisplayMemberPath="Label"
+                                              SelectedValuePath="Value"
+                                              SelectedValue="{Binding SelectedModel, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="34,0,32,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               IsHitTestVisible="False"
+                                               Text="{Binding SelectedModelLabel}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Viewbox Width="12"
+                                             Height="12"
+                                             Margin="12,0,0,0"
+                                             HorizontalAlignment="Left"
+                                             VerticalAlignment="Center"
+                                             IsHitTestVisible="False">
+                                        <Path Data="{StaticResource BoltIcon}"
+                                              Fill="{StaticResource TextSecondaryBrush}"
+                                              Stretch="Uniform" />
+                                    </Viewbox>
+                                </Grid>
+                            </Border>
+                            <Border Margin="0,0,8,0"
+                                    Background="{StaticResource ChipBrush}"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="0"
+                                    CornerRadius="14">
+                                <Grid>
+                                    <ComboBox Width="112"
+                                              Padding="10,0,14,0"
+                                              Style="{StaticResource InlineComboStyle}"
+                                              ItemsSource="{Binding ReasoningOptions}"
+                                              DisplayMemberPath="Label"
+                                              SelectedValuePath="Value"
+                                              SelectedValue="{Binding SelectedReasoningEffort, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="10,0,28,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               IsHitTestVisible="False"
+                                               Text="{Binding SelectedReasoningEffortLabel}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <StackPanel Margin="0,0,10,0"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock Margin="0,0,0,4"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           FontSize="11"
+                                           Text="{Binding Localization.ProcessingStatus}" />
+                                <ProgressBar Width="96"
+                                             Height="3"
+                                             IsIndeterminate="True"
+                                             Foreground="{StaticResource AccentBrush}"
+                                             Background="{StaticResource ChipBrush}"
+                                             BorderThickness="0" />
+                            </StackPanel>
+                            <Button Width="32"
+                                    Height="32"
+                                    Margin="0,0,8,0"
+                                    Style="{StaticResource IconButtonStyle}"
+                                    ToolTip="{Binding Localization.PasteImageTooltip}"
+                                    Command="{Binding PasteImageCommand}">
+                                <Viewbox Width="14" Height="14">
+                                    <Path Data="{StaticResource ClipboardIcon}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          Stretch="Uniform" />
+                                </Viewbox>
+                            </Button>
+                            <Button Style="{StaticResource SendButtonStyle}"
+                                    ToolTip="{Binding Localization.SendTooltip}"
+                                    Command="{Binding SendCommand}">
+                                <Viewbox Width="14" Height="14">
+                                    <Path Data="{StaticResource SendIcon}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          Stretch="Uniform" />
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <ItemsControl Grid.Row="2"
+                                  Margin="16,0,16,8"
+                                  ItemsSource="{Binding AttachedImages}">
+                        <ItemsControl.Style>
+                            <Style TargetType="ItemsControl">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AttachedImages.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ItemsControl.Style>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid x:Name="AttachmentCard"
+                                      Width="156"
+                                      Height="104"
+                                      Margin="0,0,8,8"
+                                      ToolTip="{Binding}">
+                                    <Border x:Name="AttachmentBorder"
+                                            Background="{StaticResource ChipBrush}"
+                                            BorderBrush="{StaticResource PanelBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="14">
+                                        <Grid ClipToBounds="True">
+                                            <Image Source="{Binding}"
+                                                   Stretch="UniformToFill" />
+                                            <Border x:Name="AttachmentHoverMask"
+                                                    Background="#00000000" />
+                                            <Border Background="#CC101216" VerticalAlignment="Bottom">
+                                                <TextBlock Margin="10,8"
+                                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                                           FontSize="11"
+                                                           Text="{Binding Converter={StaticResource PathToFileNameConverter}}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <Button x:Name="AttachmentRemoveButton"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Top"
+                                            Margin="8"
+                                            Visibility="Collapsed"
+                                            Style="{StaticResource AttachmentRemoveButtonStyle}"
+                                            ToolTip="{Binding DataContext.Localization.RemoveAttachmentHoverLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            Command="{Binding DataContext.RemoveAttachmentCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}">
+                                        <Viewbox Width="10" Height="10">
+                                            <Path Data="{StaticResource CloseIcon}"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                  Stretch="Uniform" />
+                                        </Viewbox>
+                                    </Button>
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <Trigger SourceName="AttachmentCard" Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="AttachmentBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                        <Setter TargetName="AttachmentBorder" Property="BorderThickness" Value="1.5" />
+                                        <Setter TargetName="AttachmentHoverMask" Property="Background" Value="#1AFFFFFF" />
+                                        <Setter TargetName="AttachmentRemoveButton" Property="Visibility" Value="Visible" />
+                                    </Trigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid Grid.Row="3" Margin="0,2,0,0">
+                        <Border Height="1"
+                                Margin="0,0,0,36"
+                                VerticalAlignment="Top"
+                                Background="{StaticResource PanelBorderSoftBrush}" />
+
+                        <Grid Margin="16,10,16,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Orientation="Horizontal">
+                                <Border Margin="0,0,8,0"
+                                        Padding="10,6"
+                                        Background="{StaticResource ChipBrush}"
+                                        BorderBrush="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="14">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Viewbox Width="12" Height="12" Margin="0,0,6,0">
+                                            <Path Data="{StaticResource FolderIcon}"
+                                                  Fill="{StaticResource TextPrimaryBrush}"
+                                                  Stretch="Uniform" />
+                                        </Viewbox>
+                                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                                   Text="{Binding Localization.LocalButton}" />
+                                    </StackPanel>
+                                </Border>
+                                <ToggleButton Margin="0,0,8,0"
+                                              Style="{StaticResource ChipToggleButtonStyle}"
+                                              IsChecked="{Binding PlanModeEnabled, UpdateSourceTrigger=PropertyChanged}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Viewbox Width="12" Height="12" Margin="0,0,6,0">
+                                            <Path Data="{StaticResource BoltIcon}"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                                  Stretch="Uniform" />
+                                        </Viewbox>
+                                        <TextBlock Text="{Binding CollaborationModeLabel}" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <Border Padding="0"
+                                        Background="{StaticResource ChipBrush}"
+                                        BorderBrush="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="14">
+                                    <Grid>
+                                        <ComboBox MinWidth="152"
+                                                  Padding="34,0,14,0"
+                                                  Style="{StaticResource InlineComboStyle}"
+                                                  Foreground="{StaticResource AccentBrush}"
+                                                  ItemsSource="{Binding SandboxModeOptions}"
+                                                  DisplayMemberPath="Label"
+                                                  SelectedValuePath="Value"
+                                                  SelectedValue="{Binding SelectedSandboxMode, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Margin="34,0,32,0"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   IsHitTestVisible="False"
+                                                   Text="{Binding SelectedSandboxModeLabel}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <Viewbox Width="12"
+                                                 Height="12"
+                                                 Margin="12,0,0,0"
+                                                 HorizontalAlignment="Left"
+                                                 VerticalAlignment="Center"
+                                                 IsHitTestVisible="False">
+                                            <Path Data="{StaticResource ShieldIcon}"
+                                                  Fill="{StaticResource AccentBrush}"
+                                                  Stretch="Uniform" />
+                                        </Viewbox>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Margin="0,0,10,0"
+                                    Style="{StaticResource ChipButtonStyle}"
+                                    Content="{Binding ProfileLabel}"
+                                    Command="{Binding OpenCodexConfigCommand}" />
+
+                            <Border Grid.Column="2"
+                                    Width="18"
+                                    Height="18"
+                                    Margin="0,0,8,0"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="{StaticResource PanelBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Background="{StaticResource ChipBrush}">
+                                <Path Data="{Binding ContextRingGeometry}"
+                                      Margin="2"
+                                      Stretch="Fill"
+                                      Stroke="{StaticResource SuccessBrush}"
+                                      StrokeThickness="1.5"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round" />
+                            </Border>
+
+                            <TextBlock Grid.Column="3"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextMutedBrush}"
+                                       FontSize="10"
+                                       Text="{Binding ContextTokensLabel}" />
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.ColumnSpan="2"
+                Panel.ZIndex="40"
+                Background="#8C0B0D10"
+                Visibility="{Binding HasCurrentApprovalPrompt, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid>
+                <Border Width="460"
+                        Padding="18"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{StaticResource PopupBrush}"
+                        BorderBrush="{StaticResource PanelBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="18">
+                    <StackPanel DataContext="{Binding CurrentApprovalPrompt}">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="34"
+                                    Height="34"
+                                    Margin="0,0,12,0"
+                                    Background="#26F59E0B"
+                                    CornerRadius="17">
+                                <Viewbox Margin="9">
+                                    <Path Data="{StaticResource WarningIcon}"
+                                          Fill="#F59E0B"
+                                          Stretch="Uniform" />
+                                </Viewbox>
+                            </Border>
+                            <StackPanel>
+                                <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding Title}" />
+                                <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                           FontSize="12"
+                                           Text="{Binding Subtitle}"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Subtitle, TargetNullValue=''}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel x:Name="ApprovalCommandBlock" Margin="0,16,0,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Command, TargetNullValue=''}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                       FontSize="11"
+                                       Text="{Binding DataContext.Localization.ApprovalCommandLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <TextBox Margin="0,4,0,0"
+                                     Style="{StaticResource PanelTextBoxStyle}"
+                                     FontFamily="Consolas"
+                                     IsReadOnly="True"
+                                     Text="{Binding Command}"
+                                     TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel x:Name="ApprovalReasonBlock" Margin="0,12,0,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Reason, TargetNullValue=''}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                       FontSize="11"
+                                       Text="{Binding DataContext.Localization.ApprovalReasonLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Text="{Binding Reason}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel x:Name="ApprovalDirectoryBlock" Margin="0,12,0,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding WorkingDirectory, TargetNullValue=''}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                       FontSize="11"
+                                       Text="{Binding DataContext.Localization.ApprovalWorkingDirectoryLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       FontFamily="Consolas"
+                                       Text="{Binding WorkingDirectory}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel x:Name="ApprovalGrantRootBlock" Margin="0,12,0,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding GrantRoot, TargetNullValue=''}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                       FontSize="11"
+                                       Text="{Binding DataContext.Localization.ApprovalGrantRootLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       FontFamily="Consolas"
+                                       Text="{Binding GrantRoot}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <ItemsControl Margin="0,18,0,0"
+                                      ItemsSource="{Binding Options}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Margin="0,0,10,10"
+                                            Command="{Binding DataContext.ResolveApprovalCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource ApprovalActionButtonStyle}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPrimary}" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource SendButtonBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsDanger}" Value="True">
+                                                        <Setter Property="Background" Value="#26EF4444" />
+                                                        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                        <TextBlock Text="{Binding Label}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Border Grid.ColumnSpan="2"
+                Panel.ZIndex="41"
+                Background="#8C0B0D10"
+                Visibility="{Binding HasCurrentUserInputPrompt, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid>
+                <Border Width="460"
+                        Padding="18"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{StaticResource PopupBrush}"
+                        BorderBrush="{StaticResource PanelBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="18">
+                    <StackPanel DataContext="{Binding CurrentUserInputPrompt}">
+                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding Title}" />
+
+                        <ItemsControl Margin="0,16,0,0"
+                                      ItemsSource="{Binding Questions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,14">
+                                        <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                                   FontSize="11"
+                                                   Text="{Binding Header}" />
+                                        <TextBlock Margin="0,4,0,8"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   Text="{Binding Question}"
+                                                   TextWrapping="Wrap" />
+                                        <ComboBox ItemsSource="{Binding Options}"
+                                                  DisplayMemberPath="Label"
+                                                  SelectedValuePath="Value"
+                                                  SelectedValue="{Binding SelectedOptionValue, UpdateSourceTrigger=PropertyChanged}">
+                                            <ComboBox.Style>
+                                                <Style TargetType="ComboBox" BasedOn="{StaticResource PanelComboBoxStyle}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding AcceptsText}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ComboBox.Style>
+                                        </ComboBox>
+                                        <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox" BasedOn="{StaticResource PanelTextBoxStyle}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding AcceptsText}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Margin="0,8,0,0"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right">
+                            <Button Margin="0,0,10,0"
+                                    Style="{StaticResource ApprovalActionButtonStyle}"
+                                    Content="{Binding DataContext.Localization.ApprovalCancel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Command="{Binding DataContext.CancelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <Button Style="{StaticResource ApprovalActionButtonStyle}"
+                                    Background="{StaticResource SendButtonBrush}"
+                                    Content="{Binding DataContext.Localization.InsertButton, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Command="{Binding DataContext.ResolveUserInputCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

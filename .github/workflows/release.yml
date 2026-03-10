@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão do release no formato major.minor.patch"
+        required: true
+        type: string
+      prerelease:
+        description: "Publicar como pré-release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ inputs.version }}"
+            $prerelease = "${{ inputs.prerelease }}"
+          }
+          else {
+            $version = "${{ github.ref_name }}"
+            if ($version.StartsWith("v")) {
+              $version = $version.Substring(1)
+            }
+            $prerelease = "false"
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "A versão deve estar no formato major.minor.patch."
+          }
+
+          @(
+            "version=$version"
+            "assembly_version=$version.0"
+            "tag=v$version"
+            "prerelease=$prerelease"
+          ) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Stamp extension version
+        shell: pwsh
+        run: |
+          .\scripts\Set-VsixVersion.ps1 `
+            -Version "${{ steps.version.outputs.version }}" `
+            -AssemblyVersion "${{ steps.version.outputs.assembly_version }}"
+
+      - name: Build VSIX
+        shell: pwsh
+        run: |
+          msbuild CodexVs2026Extension.sln `
+            /restore `
+            /t:Build `
+            /m `
+            /p:Configuration=Release `
+            /p:BuildVsixPackage=true
+
+      - name: Collect artifact
+        id: package
+        shell: pwsh
+        run: |
+          $vsix = Get-ChildItem -Path CodexVsix -Filter *.vsix -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $vsix) {
+            throw "Nenhum arquivo VSIX foi gerado."
+          }
+
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $target = Join-Path (Resolve-Path artifacts) ("CodexVsix-" + "${{ steps.version.outputs.version }}" + ".vsix")
+          Copy-Item -Path $vsix.FullName -Destination $target -Force
+          "path=$($target -replace '\\', '/')" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexVsix-${{ steps.version.outputs.version }}
+          path: ${{ steps.package.outputs.path }}
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Codex for Visual Studio 2026 v${{ steps.version.outputs.version }}
+          files: ${{ steps.package.outputs.path }}
+          generate_release_notes: true
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          fail_on_unmatched_files: true

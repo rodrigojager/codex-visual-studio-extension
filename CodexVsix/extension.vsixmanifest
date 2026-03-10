@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Vsix xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Identifier Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61">
+    <Name>Codex for Visual Studio 2026</Name>
+    <Author>Rodrigo Jager</Author>
+    <Version>1.0.0</Version>
+    <Description xml:space="preserve">Abre um painel lateral no Visual Studio 2026 para interagir com o Codex.</Description>
+    <Locale>pt-BR</Locale>
+  </Identifier>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[18.0,19.0)" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[18.0,19.0)" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[18.0,19.0)" />
+  </Installation>
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP" DisplayName=".NET Framework" Version="[4.7.2,)" />
+  </Dependencies>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" Path="CodexVsix.pkgdef" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011" />
+    <Asset Type="Microsoft.VisualStudio.Assembly" d:Source="Project" Path="CodexVsix.dll" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011" />
+  </Assets>
+</Vsix>

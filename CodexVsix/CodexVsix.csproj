@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>CodexVsix</AssemblyName>
+    <TargetName>CodexVsix</TargetName>
+    <TargetFramework>net472</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <BaseOutputPath>bin\</BaseOutputPath>
+    <OutputPath>bin\$(Configuration)\$(TargetFramework)\</OutputPath>
+    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+    <IntermediateOutputPath>obj\$(Configuration)\$(TargetFramework)\</IntermediateOutputPath>
+    <CreatePkgDefAssemblyToProcess>$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).dll</CreatePkgDefAssemblyToProcess>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>
+    <IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
+    <CopyBuildOutputToOutputDirectory>true</CopyBuildOutputToOutputDirectory>
+    <CopyOutputSymbolsToOutputDirectory>false</CopyOutputSymbolsToOutputDirectory>
+    <DeployExtension>false</DeployExtension>
+    <GeneratePkgDefFile>true</GeneratePkgDefFile>
+    <UseCodebase>true</UseCodebase>
+    <NoWarn>VSSDK006;VSSDK008</NoWarn>
+    <BuildVsixPackage Condition="'$(BuildVsixPackage)' == ''">false</BuildVsixPackage>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DeployExtension>true</DeployExtension>
+    <StartAction>Program</StartAction>
+    <StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
+    <StartArguments>/rootsuffix Exp /log</StartArguments>
+    <StartWorkingDirectory>$(DevEnvDir)</StartWorkingDirectory>
+  </PropertyGroup>
+
+  <Target Name="BuildVsixArtifacts"
+          AfterTargets="Build"
+          Condition="'$(MSBuildRuntimeType)' != 'Core' and ('$(Configuration)' == 'Debug' or '$(BuildVsixPackage)' == 'true')">
+    <CallTarget Targets="GeneratePkgDef;CopyVsixManifestFile;CreateVsixContainer" />
+  </Target>
+
+  <Target Name="IncludeMenusCtmenuInVsix"
+          BeforeTargets="GetVsixSourceItems"
+          DependsOnTargets="VSCTCompile">
+    <ItemGroup>
+      <VSIXSourceItem Include="$(IntermediateOutputPath)Commands.cto">
+        <TargetPath>Menus.ctmenu</TargetPath>
+      </VSIXSourceItem>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="DeployVsixToExperimentalInstance"
+          AfterTargets="BuildVsixArtifacts"
+          Condition="'$(Configuration)' == 'Debug' and '$(MSBuildRuntimeType)' != 'Core' and '$(BuildingInsideVisualStudio)' == 'true'">
+    <CallTarget Targets="DeployVsixExtensionFiles" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.14.40264" ExcludeAssets="runtime" NoWarn="NU1603" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2120" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.507" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Design" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <VSCTCompile Include="Commands.vsct">
+      <ResourceName>Menus.ctmenu</ResourceName>
+    </VSCTCompile>
+    <None Include="source.extension.vsixmanifest">
+      <SubType>Designer</SubType>
+    </None>
+  </ItemGroup>
+
+  <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets"
+          Condition="'$(PkgMicrosoft_VSSDK_BuildTools)' != '' and Exists('$(PkgMicrosoft_VSSDK_BuildTools)\tools\vssdk\Microsoft.VsSDK.targets')" />
+</Project>

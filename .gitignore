@@ -1,0 +1,34 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+TestResults/
+
+# VSIX and binary artifacts
+*.vsix
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# NuGet and SDK caches
+packages/
+.nuget/
+.dotnet/
+.dotnet-cli/
+
+# Local Codex/generated files
+.codex-app-server-schema/
+
+# OS files
+Thumbs.db
+.DS_Store
