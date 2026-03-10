@@ -250,6 +250,7 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="10,0,14,0" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -270,14 +271,17 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Margin="0,0,12,0"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                               Foreground="{TemplateBinding Foreground}"
-                                               FontSize="{TemplateBinding FontSize}"
-                                               Text="{Binding SelectionBoxItem, RelativeSource={RelativeSource TemplatedParent}}"
-                                               TextTrimming="CharacterEllipsis"
-                                               IsHitTestVisible="False" />
+                                    <ContentPresenter x:Name="SelectionContent"
+                                                      Margin="0,0,12,0"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                      RecognizesAccessKey="True"
+                                                      TextElement.Foreground="{TemplateBinding Foreground}"
+                                                      TextElement.FontSize="{TemplateBinding FontSize}"
+                                                      IsHitTestVisible="False" />
                                     <Path Grid.Column="1"
                                           Width="10"
                                           Height="6"
@@ -328,6 +332,9 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="HasItems" Value="False">
                                 <Setter TargetName="Popup" Property="MinHeight" Value="28" />
+                            </Trigger>
+                            <Trigger Property="Tag" Value="HideSelectionText">
+                                <Setter TargetName="SelectionContent" Property="Visibility" Value="Collapsed" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ComboSurface" Property="Background" Value="{StaticResource PopupItemHoverBrush}" />
@@ -648,87 +655,162 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding Messages}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border x:Name="Bubble"
-                                        MaxWidth="540"
-                                        Margin="0,0,0,26"
-                                        Padding="0"
-                                        HorizontalAlignment="Left"
-                                        Background="Transparent"
-                                        BorderThickness="0">
-                                    <StackPanel>
-                                        <TextBlock x:Name="EventTitle"
-                                                   Margin="0,0,0,8"
-                                                   Foreground="{StaticResource TextMutedBrush}"
-                                                   FontSize="10"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding Title}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   TextWrapping="NoWrap"
-                                                   Visibility="Collapsed" />
-                                        <TextBlock x:Name="BubbleText"
-                                                   Foreground="{StaticResource TextPrimaryBrush}"
-                                                   FontSize="13"
-                                                   LineHeight="20"
-                                                   Text="{Binding Text}"
-                                                   TextWrapping="Wrap" />
-                                        <Border x:Name="EventDetailHost"
-                                                Margin="0,10,0,0"
-                                                Padding="10,8"
-                                                Background="{StaticResource EventDetailBrush}"
-                                                BorderBrush="{StaticResource PanelBorderSoftBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="10"
-                                                Visibility="Collapsed">
-                                            <TextBlock x:Name="EventDetailText"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                                       FontFamily="Consolas"
-                                                       FontSize="11"
-                                                       LineHeight="17"
-                                                       Text="{Binding Detail}"
+                <ScrollViewer x:Name="ChatScrollViewer"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding Messages}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="Bubble"
+                                            MaxWidth="540"
+                                            Margin="0,0,0,26"
+                                            Padding="0"
+                                            HorizontalAlignment="Left"
+                                            Background="Transparent"
+                                            BorderThickness="0">
+                                        <StackPanel>
+                                            <TextBlock x:Name="EventTitle"
+                                                       Margin="0,0,0,8"
+                                                       Foreground="{StaticResource TextMutedBrush}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding Title}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap"
+                                                       Visibility="Collapsed" />
+                                            <TextBlock x:Name="BubbleText"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                                       FontSize="13"
+                                                       LineHeight="20"
+                                                       Text="{Binding Text}"
                                                        TextWrapping="Wrap" />
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
-                                <DataTemplate.Triggers>
-                                    <DataTrigger Binding="{Binding HasTitle}" Value="True">
-                                        <Setter TargetName="EventTitle" Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding HasDetail}" Value="True">
-                                        <Setter TargetName="EventDetailHost" Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                        <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right" />
-                                        <Setter TargetName="Bubble" Property="Background" Value="{StaticResource UserBubbleBrush}" />
-                                        <Setter TargetName="Bubble" Property="Padding" Value="14,11" />
-                                        <Setter TargetName="Bubble" Property="CornerRadius" Value="16" />
-                                        <Setter TargetName="Bubble" Property="Margin" Value="0,0,8,26" />
-                                        <Setter TargetName="BubbleText" Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding IsUser}" Value="False">
-                                        <Setter TargetName="Bubble" Property="Margin" Value="34,34,96,26" />
-                                        <Setter TargetName="BubbleText" Property="FontSize" Value="14" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding IsEvent}" Value="True">
-                                        <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch" />
-                                        <Setter TargetName="Bubble" Property="MaxWidth" Value="680" />
-                                        <Setter TargetName="Bubble" Property="Background" Value="{StaticResource EventCardBrush}" />
-                                        <Setter TargetName="Bubble" Property="BorderBrush" Value="{StaticResource EventCardBorderBrush}" />
-                                        <Setter TargetName="Bubble" Property="BorderThickness" Value="1" />
-                                        <Setter TargetName="Bubble" Property="Padding" Value="14,12" />
-                                        <Setter TargetName="Bubble" Property="CornerRadius" Value="14" />
-                                        <Setter TargetName="Bubble" Property="Margin" Value="34,4,96,18" />
-                                        <Setter TargetName="BubbleText" Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
-                                        <Setter TargetName="BubbleText" Property="FontSize" Value="12" />
-                                        <Setter TargetName="BubbleText" Property="LineHeight" Value="18" />
-                                    </DataTrigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                            <Border x:Name="EventDetailHost"
+                                                    Margin="0,10,0,0"
+                                                    Padding="10,8"
+                                                    Background="{StaticResource EventDetailBrush}"
+                                                    BorderBrush="{StaticResource PanelBorderSoftBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="10"
+                                                    Visibility="Collapsed">
+                                                <TextBlock x:Name="EventDetailText"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           LineHeight="17"
+                                                           Text="{Binding Detail}"
+                                                           TextWrapping="Wrap" />
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding HasTitle}" Value="True">
+                                            <Setter TargetName="EventTitle" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding HasDetail}" Value="True">
+                                            <Setter TargetName="EventDetailHost" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                            <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right" />
+                                            <Setter TargetName="Bubble" Property="Background" Value="{StaticResource UserBubbleBrush}" />
+                                            <Setter TargetName="Bubble" Property="Padding" Value="14,11" />
+                                            <Setter TargetName="Bubble" Property="CornerRadius" Value="16" />
+                                            <Setter TargetName="Bubble" Property="Margin" Value="0,0,8,26" />
+                                            <Setter TargetName="BubbleText" Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsUser}" Value="False">
+                                            <Setter TargetName="Bubble" Property="Margin" Value="34,34,96,26" />
+                                            <Setter TargetName="BubbleText" Property="FontSize" Value="14" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsEvent}" Value="True">
+                                            <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch" />
+                                            <Setter TargetName="Bubble" Property="MaxWidth" Value="680" />
+                                            <Setter TargetName="Bubble" Property="Background" Value="{StaticResource EventCardBrush}" />
+                                            <Setter TargetName="Bubble" Property="BorderBrush" Value="{StaticResource EventCardBorderBrush}" />
+                                            <Setter TargetName="Bubble" Property="BorderThickness" Value="1" />
+                                            <Setter TargetName="Bubble" Property="Padding" Value="14,12" />
+                                            <Setter TargetName="Bubble" Property="CornerRadius" Value="14" />
+                                            <Setter TargetName="Bubble" Property="Margin" Value="34,4,96,18" />
+                                            <Setter TargetName="BubbleText" Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+                                            <Setter TargetName="BubbleText" Property="FontSize" Value="12" />
+                                            <Setter TargetName="BubbleText" Property="LineHeight" Value="18" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Border Margin="34,34,96,26"
+                                Padding="14,12"
+                                HorizontalAlignment="Left"
+                                Background="{StaticResource EventCardBrush}"
+                                BorderBrush="{StaticResource EventCardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="8"
+                                         Height="8"
+                                         Margin="0,0,6,0"
+                                         Fill="{StaticResource TextSecondaryBrush}"
+                                         Opacity="0.28">
+                                    <Ellipse.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity">
+                                                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0.28" />
+                                                        <SplineDoubleKeyFrame KeyTime="0:0:0.18" Value="1" />
+                                                        <SplineDoubleKeyFrame KeyTime="0:0:0.54" Value="0.28" />
+                                                        <DiscreteDoubleKeyFrame KeyTime="0:0:0.9" Value="0.28" />
+                                                    </DoubleAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Ellipse.Triggers>
+                                </Ellipse>
+                                <Ellipse Width="8"
+                                         Height="8"
+                                         Margin="0,0,6,0"
+                                         Fill="{StaticResource TextSecondaryBrush}"
+                                         Opacity="0.28">
+                                    <Ellipse.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity">
+                                                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0.28" />
+                                                        <DiscreteDoubleKeyFrame KeyTime="0:0:0.18" Value="0.28" />
+                                                        <SplineDoubleKeyFrame KeyTime="0:0:0.36" Value="1" />
+                                                        <SplineDoubleKeyFrame KeyTime="0:0:0.72" Value="0.28" />
+                                                        <DiscreteDoubleKeyFrame KeyTime="0:0:0.9" Value="0.28" />
+                                                    </DoubleAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Ellipse.Triggers>
+                                </Ellipse>
+                                <Ellipse Width="8"
+                                         Height="8"
+                                         Fill="{StaticResource TextSecondaryBrush}"
+                                         Opacity="0.28">
+                                    <Ellipse.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="Opacity">
+                                                        <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0.28" />
+                                                        <DiscreteDoubleKeyFrame KeyTime="0:0:0.36" Value="0.28" />
+                                                        <SplineDoubleKeyFrame KeyTime="0:0:0.54" Value="1" />
+                                                        <SplineDoubleKeyFrame KeyTime="0:0:0.9" Value="0.28" />
+                                                    </DoubleAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Ellipse.Triggers>
+                                </Ellipse>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                 </ScrollViewer>
 
                 <Border Grid.Row="1"
@@ -799,16 +881,17 @@
                         </TextBlock>
                     </Grid>
 
-                    <Grid Grid.Row="1" Margin="16,10,16,12">
+                    <Grid Grid.Row="1" Margin="16,10,16,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Orientation="Horizontal">
+                        <WrapPanel Margin="0,0,12,0"
+                                   Orientation="Horizontal">
                             <Button Width="32"
                                     Height="32"
-                                    Margin="0,0,8,0"
+                                    Margin="0,0,8,8"
                                     Style="{StaticResource IconButtonStyle}"
                                     ToolTip="{Binding Localization.AddAttachmentTooltip}"
                                     Command="{Binding AddImageFileCommand}">
@@ -818,13 +901,15 @@
                                           Stretch="Uniform" />
                                 </Viewbox>
                             </Button>
-                            <Border Margin="0,0,8,0"
+                            <Border MinHeight="32"
+                                    Margin="0,0,8,8"
                                     Background="{StaticResource ChipBrush}"
                                     BorderBrush="Transparent"
                                     BorderThickness="0"
                                     CornerRadius="14">
                                 <Grid>
                                     <ComboBox MinWidth="150"
+                                              Tag="HideSelectionText"
                                               Padding="34,0,14,0"
                                               Style="{StaticResource InlineComboStyle}"
                                               Foreground="{StaticResource TextPrimaryBrush}"
@@ -850,13 +935,15 @@
                                     </Viewbox>
                                 </Grid>
                             </Border>
-                            <Border Margin="0,0,8,0"
+                            <Border MinHeight="32"
+                                    Margin="0,0,8,8"
                                     Background="{StaticResource ChipBrush}"
                                     BorderBrush="Transparent"
                                     BorderThickness="0"
                                     CornerRadius="14">
                                 <Grid>
                                     <ComboBox Width="112"
+                                              Tag="HideSelectionText"
                                               Padding="10,0,14,0"
                                               Style="{StaticResource InlineComboStyle}"
                                               ItemsSource="{Binding ReasoningOptions}"
@@ -871,36 +958,14 @@
                                                TextTrimming="CharacterEllipsis" />
                                 </Grid>
                             </Border>
-                        </StackPanel>
+                        </WrapPanel>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <StackPanel Margin="0,0,10,0"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <TextBlock Margin="0,0,0,4"
-                                           Foreground="{StaticResource TextMutedBrush}"
-                                           FontSize="11"
-                                           Text="{Binding Localization.ProcessingStatus}" />
-                                <ProgressBar Width="96"
-                                             Height="3"
-                                             IsIndeterminate="True"
-                                             Foreground="{StaticResource AccentBrush}"
-                                             Background="{StaticResource ChipBrush}"
-                                             BorderThickness="0" />
-                            </StackPanel>
-                            <Button Width="32"
-                                    Height="32"
-                                    Margin="0,0,8,0"
-                                    Style="{StaticResource IconButtonStyle}"
-                                    ToolTip="{Binding Localization.PasteImageTooltip}"
-                                    Command="{Binding PasteImageCommand}">
-                                <Viewbox Width="14" Height="14">
-                                    <Path Data="{StaticResource ClipboardIcon}"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                          Stretch="Uniform" />
-                                </Viewbox>
-                            </Button>
-                            <Button Style="{StaticResource SendButtonStyle}"
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top">
+                            <Button Margin="0,0,0,8"
+                                    Style="{StaticResource SendButtonStyle}"
                                     ToolTip="{Binding Localization.SendTooltip}"
                                     Command="{Binding SendCommand}">
                                 <Viewbox Width="14" Height="14">
@@ -985,21 +1050,24 @@
                     </ItemsControl>
 
                     <Grid Grid.Row="3" Margin="0,2,0,0">
-                        <Border Height="1"
-                                Margin="0,0,0,36"
-                                VerticalAlignment="Top"
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0"
+                                Height="1"
                                 Background="{StaticResource PanelBorderSoftBrush}" />
 
-                        <Grid Margin="16,10,16,12">
+                        <Grid Grid.Row="1" Margin="16,10,16,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Orientation="Horizontal">
-                                <Border Margin="0,0,8,0"
+                            <WrapPanel Margin="0,0,12,0"
+                                       Orientation="Horizontal">
+                                <Border Margin="0,0,8,8"
                                         Padding="10,6"
                                         Background="{StaticResource ChipBrush}"
                                         BorderBrush="Transparent"
@@ -1015,7 +1083,7 @@
                                                    Text="{Binding Localization.LocalButton}" />
                                     </StackPanel>
                                 </Border>
-                                <ToggleButton Margin="0,0,8,0"
+                                <ToggleButton Margin="0,0,8,8"
                                               Style="{StaticResource ChipToggleButtonStyle}"
                                               IsChecked="{Binding PlanModeEnabled, UpdateSourceTrigger=PropertyChanged}">
                                     <StackPanel Orientation="Horizontal">
@@ -1027,13 +1095,16 @@
                                         <TextBlock Text="{Binding CollaborationModeLabel}" />
                                     </StackPanel>
                                 </ToggleButton>
-                                <Border Padding="0"
+                                <Border MinHeight="32"
+                                        Margin="0,0,8,8"
+                                        Padding="0"
                                         Background="{StaticResource ChipBrush}"
                                         BorderBrush="Transparent"
                                         BorderThickness="0"
                                         CornerRadius="14">
                                     <Grid>
                                         <ComboBox MinWidth="152"
+                                                  Tag="HideSelectionText"
                                                   Padding="34,0,14,0"
                                                   Style="{StaticResource InlineComboStyle}"
                                                   Foreground="{StaticResource AccentBrush}"
@@ -1059,37 +1130,33 @@
                                         </Viewbox>
                                     </Grid>
                                 </Border>
+                            </WrapPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top">
+                                <Border Width="18"
+                                        Height="18"
+                                        Margin="0,0,8,0"
+                                        VerticalAlignment="Center"
+                                        BorderBrush="{StaticResource PanelBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Background="{StaticResource ChipBrush}">
+                                    <Path Data="{Binding ContextRingGeometry}"
+                                          Margin="2"
+                                          Stretch="Fill"
+                                          Stroke="{StaticResource SuccessBrush}"
+                                          StrokeThickness="1.5"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round" />
+                                </Border>
+                                <TextBlock VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           FontSize="10"
+                                           Text="{Binding ContextTokensLabel}" />
                             </StackPanel>
-
-                            <Button Grid.Column="1"
-                                    Margin="0,0,10,0"
-                                    Style="{StaticResource ChipButtonStyle}"
-                                    Content="{Binding ProfileLabel}"
-                                    Command="{Binding OpenCodexConfigCommand}" />
-
-                            <Border Grid.Column="2"
-                                    Width="18"
-                                    Height="18"
-                                    Margin="0,0,8,0"
-                                    VerticalAlignment="Center"
-                                    BorderBrush="{StaticResource PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Background="{StaticResource ChipBrush}">
-                                <Path Data="{Binding ContextRingGeometry}"
-                                      Margin="2"
-                                      Stretch="Fill"
-                                      Stroke="{StaticResource SuccessBrush}"
-                                      StrokeThickness="1.5"
-                                      StrokeStartLineCap="Round"
-                                      StrokeEndLineCap="Round" />
-                            </Border>
-
-                            <TextBlock Grid.Column="3"
-                                       VerticalAlignment="Center"
-                                       Foreground="{StaticResource TextMutedBrush}"
-                                       FontSize="10"
-                                       Text="{Binding ContextTokensLabel}" />
                         </Grid>
                     </Grid>
                 </Grid>
