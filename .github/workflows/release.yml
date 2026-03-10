@@ -73,7 +73,7 @@ jobs:
         run: |
           msbuild CodexVs2026Extension.sln `
             /restore `
-            /t:Build `
+            /t:Rebuild `
             /m `
             /p:Configuration=Release `
             /p:BuildVsixPackage=true

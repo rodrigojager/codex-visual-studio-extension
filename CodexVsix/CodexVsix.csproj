@@ -48,6 +48,16 @@
     </ItemGroup>
   </Target>
 
+  <Target Name="IncludeNewtonsoftJsonInVsix"
+          BeforeTargets="GetVsixSourceItems">
+    <ItemGroup>
+      <VSIXSourceItem Include="$(OutputPath)Newtonsoft.Json.dll"
+                      Condition="Exists('$(OutputPath)Newtonsoft.Json.dll')">
+        <TargetPath>Newtonsoft.Json.dll</TargetPath>
+      </VSIXSourceItem>
+    </ItemGroup>
+  </Target>
+
   <Target Name="DeployVsixToExperimentalInstance"
           AfterTargets="BuildVsixArtifacts"
           Condition="'$(Configuration)' == 'Debug' and '$(MSBuildRuntimeType)' != 'Core' and '$(BuildingInsideVisualStudio)' == 'true'">
