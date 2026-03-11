@@ -68,21 +68,12 @@
     <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.14.40264" ExcludeAssets="runtime" NoWarn="NU1603" />
     <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2120" PrivateAssets="all" GeneratePathProperty="true" />
     <PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.507" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3800.47" ExcludeAssets="runtime" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>
     <Reference Include="System.Design" />
-    <Reference Include="Microsoft.Web.WebView2.Core"
-               Condition="Exists('$(DevEnvDir)PrivateAssemblies\Microsoft.Web.WebView2.Core.dll')">
-      <HintPath>$(DevEnvDir)PrivateAssemblies\Microsoft.Web.WebView2.Core.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Microsoft.Web.WebView2.Wpf"
-               Condition="Exists('$(DevEnvDir)PrivateAssemblies\Microsoft.Web.WebView2.Wpf.dll')">
-      <HintPath>$(DevEnvDir)PrivateAssemblies\Microsoft.Web.WebView2.Wpf.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
   </ItemGroup>
 
   <ItemGroup>
