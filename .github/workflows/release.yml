@@ -71,25 +71,59 @@ jobs:
       - name: Build VSIX
         shell: pwsh
         run: |
-          msbuild CodexVs2026Extension.sln `
+          Remove-Item -Path CodexVsix\CodexVsix.vsix -ErrorAction SilentlyContinue
+          Remove-Item -Path CodexVsix\obj\Release\net472\extension.vsixmanifest -ErrorAction SilentlyContinue
+
+          msbuild CodexVsix\CodexVsix.csproj `
             /restore `
             /t:Rebuild `
             /m `
             /p:Configuration=Release `
             /p:BuildVsixPackage=true
 
+      - name: Verify VSIX output
+        id: verify
+        shell: pwsh
+        run: |
+          $vsix = Resolve-Path CodexVsix\CodexVsix.vsix -ErrorAction SilentlyContinue
+          if (-not $vsix) {
+            throw "O arquivo CodexVsix\\CodexVsix.vsix não foi gerado."
+          }
+
+          $extractPath = Join-Path $env:RUNNER_TEMP "codex-vsix-verify"
+          $zipPath = Join-Path $env:RUNNER_TEMP "codex-vsix-verify.zip"
+          Remove-Item -Path $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path $vsix.Path -Destination $zipPath -Force
+          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+
+          $manifestPath = Join-Path $extractPath "extension.vsixmanifest"
+          if (-not (Test-Path $manifestPath)) {
+            throw "O extension.vsixmanifest não foi encontrado dentro do VSIX."
+          }
+
+          [xml]$manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8
+          $ns = New-Object System.Xml.XmlNamespaceManager($manifest.NameTable)
+          $ns.AddNamespace("vsix", "http://schemas.microsoft.com/developer/vsx-schema/2011")
+          $identity = $manifest.SelectSingleNode("/vsix:PackageManifest/vsix:Metadata/vsix:Identity", $ns)
+          if (-not $identity) {
+            throw "Não foi possível localizar o Identity dentro do extension.vsixmanifest empacotado."
+          }
+
+          $manifestVersion = $identity.Version
+          if ($manifestVersion -ne "${{ steps.version.outputs.version }}") {
+            throw "A versão dentro do VSIX ($manifestVersion) difere da versão esperada (${{ steps.version.outputs.version }})."
+          }
+
+          "vsix_path=$($vsix.Path -replace '\\', '/')" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Collect artifact
         id: package
         shell: pwsh
         run: |
-          $vsix = Get-ChildItem -Path CodexVsix -Filter *.vsix -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $vsix) {
-            throw "Nenhum arquivo VSIX foi gerado."
-          }
-
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           $target = Join-Path (Resolve-Path artifacts) ("CodexVsix-" + "${{ steps.version.outputs.version }}" + ".vsix")
-          Copy-Item -Path $vsix.FullName -Destination $target -Force
+          Copy-Item -Path "${{ steps.verify.outputs.vsix_path }}" -Destination $target -Force
           "path=$($target -replace '\\', '/')" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload workflow artifact

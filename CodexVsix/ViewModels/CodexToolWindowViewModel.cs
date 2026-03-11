@@ -130,7 +130,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
         RefreshMentions();
         UpdateContextEstimate();
-        ThreadHelper.JoinableTaskFactory.RunAsync(InitializeAsync);
+        ThreadHelper.JoinableTaskFactory.RunAsync(InitializeSafeAsync);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -1160,6 +1160,25 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         if (ShowSettingsPanel)
         {
             ShowHistoryPanel = false;
+        }
+    }
+
+    private async Task InitializeSafeAsync()
+    {
+        try
+        {
+            await InitializeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            ActivityLog.TryLogError("CodexVsix", "Falha durante a inicialização assíncrona do painel do Codex." + Environment.NewLine + ex);
+            AppendOutput("[init] " + ex.Message + Environment.NewLine);
+            CodexEnvironmentStatus = new CodexEnvironmentStatus
+            {
+                Stage = CodexSetupStage.Error,
+                ErrorDetail = ex.Message
+            };
+            ClearServerSurfaces();
         }
     }
 
