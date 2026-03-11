@@ -19,9 +19,38 @@ public sealed class LocalizationService
         ["AgentModeLabel"] = "Agent mode",
         ["AppsTitle"] = "Apps",
         ["McpServersTitle"] = "MCP servers",
+        ["DetectedSkillsTitle"] = "Detected skills",
         ["SettingsTitle"] = "Configuration and details",
         ["ExecutableLabel"] = "Executable",
         ["WorkingDirectoryLabel"] = "Working directory",
+        ["CodexConfigLabel"] = "Codex config",
+        ["CodexSkillsLabel"] = "Skills folder",
+        ["ManagedMcpTitle"] = "Managed MCP servers",
+        ["ManagedMcpDescription"] = "Configure MCP entries for this extension without editing TOML manually.",
+        ["ManagedMcpNameLabel"] = "Server name",
+        ["ManagedMcpTransportLabel"] = "Transport",
+        ["ManagedMcpCommandLabel"] = "Command",
+        ["ManagedMcpArgsLabel"] = "Arguments, one per line",
+        ["ManagedMcpUrlLabel"] = "URL",
+        ["ManagedMcpStdioOption"] = "Command (stdio)",
+        ["ManagedMcpUrlOption"] = "URL",
+        ["ManagedMcpAddStdioButton"] = "Add stdio",
+        ["ManagedMcpAddUrlButton"] = "Add URL",
+        ["ManagedMcpRemoveButton"] = "Remove",
+        ["ManagedMcpApplyButton"] = "Apply and refresh",
+        ["ManagedMcpHint"] = "Only enabled and valid entries are applied. Valid names use letters, numbers, '-' or '_'.",
+        ["SkillsTitle"] = "Skills",
+        ["SkillsDescription"] = "Create and open global skills from the same place you manage the Codex integration.",
+        ["SkillNameLabel"] = "Skill name",
+        ["SkillDescriptionLabel"] = "Initial description",
+        ["CreateSkillButton"] = "Create skill",
+        ["OpenSkillsFolderButton"] = "Open skills folder",
+        ["OpenConfigButton"] = "Open config",
+        ["SkillOpenButton"] = "Open",
+        ["RefreshStatusButton"] = "Refresh",
+        ["EnabledLabel"] = "Enabled",
+        ["NoSkillsDetected"] = "No skills detected yet.",
+        ["NoManagedMcpServers"] = "No managed MCP server configured.",
         ["VerbosityLabel"] = "Verbosity",
         ["ApprovalPolicyLabel"] = "Approval policy",
         ["RawOutputLabel"] = "Raw output",
@@ -32,6 +61,28 @@ public sealed class LocalizationService
         ["SendTooltip"] = "Send prompt",
         ["HistoryTooltip"] = "Open topics",
         ["SettingsTooltip"] = "Open settings",
+        ["SetupCheckingTitle"] = "Checking Codex environment",
+        ["SetupCheckingSummary"] = "Validating executable, authentication, and local configuration.",
+        ["SetupMissingExecutableTitle"] = "Codex CLI not found",
+        ["SetupMissingExecutableSummary"] = "Install Codex CLI and confirm the executable path before using the extension.",
+        ["SetupMissingAuthTitle"] = "Codex found, but login is missing",
+        ["SetupMissingAuthSummary"] = "Authenticate with Codex CLI or provide an OPENAI_API_KEY before starting a session.",
+        ["SetupReadyTitle"] = "Codex is ready",
+        ["SetupReadySummary"] = "The extension can start sessions with the local Codex CLI.",
+        ["SetupErrorTitle"] = "Codex setup needs attention",
+        ["SetupErrorSummary"] = "The extension found Codex, but could not validate the environment.",
+        ["SetupInstallButton"] = "Copy install command",
+        ["SetupLoginButton"] = "Open login",
+        ["SetupRefreshButton"] = "Refresh status",
+        ["SetupSettingsButton"] = "Open settings",
+        ["SetupInstallHint"] = "Install command",
+        ["SetupExecutableHint"] = "Executable",
+        ["SetupAuthHint"] = "Authentication",
+        ["SetupVersionHint"] = "Version",
+        ["SetupAuthFileLabel"] = "Using ~/.codex/auth.json",
+        ["SetupApiKeyLabel"] = "Using OPENAI_API_KEY",
+        ["SetupMissingAuthDetail"] = "Run `codex login` in a terminal or configure an API key.",
+        ["SetupInstallDetail"] = "Recommended install: `npm install -g @openai/codex`",
         ["LocalButton"] = "Local",
         ["RemoveAttachmentHoverLabel"] = "Remove",
         ["ApprovalCommandTitle"] = "Command approval required",
@@ -356,9 +407,38 @@ public sealed class LocalizationService
     public string AgentModeLabel => Get("AgentModeLabel");
     public string AppsTitle => Get("AppsTitle");
     public string McpServersTitle => Get("McpServersTitle");
+    public string DetectedSkillsTitle => GetLocalizedString("DetectedSkillsTitle", "Skills detectadas");
     public string SettingsTitle => Get("SettingsTitle");
     public string ExecutableLabel => Get("ExecutableLabel");
     public string WorkingDirectoryLabel => Get("WorkingDirectoryLabel");
+    public string CodexConfigLabel => GetLocalizedString("CodexConfigLabel", "Configuração do Codex");
+    public string CodexSkillsLabel => GetLocalizedString("CodexSkillsLabel", "Pasta de skills");
+    public string ManagedMcpTitle => GetLocalizedString("ManagedMcpTitle", "MCPs gerenciados");
+    public string ManagedMcpDescription => GetLocalizedString("ManagedMcpDescription", "Configure entradas de MCP pela interface da extensão, sem editar TOML manualmente.");
+    public string ManagedMcpNameLabel => GetLocalizedString("ManagedMcpNameLabel", "Nome do servidor");
+    public string ManagedMcpTransportLabel => GetLocalizedString("ManagedMcpTransportLabel", "Transporte");
+    public string ManagedMcpCommandLabel => GetLocalizedString("ManagedMcpCommandLabel", "Comando");
+    public string ManagedMcpArgsLabel => GetLocalizedString("ManagedMcpArgsLabel", "Argumentos, um por linha");
+    public string ManagedMcpUrlLabel => GetLocalizedString("ManagedMcpUrlLabel", "URL");
+    public string ManagedMcpStdioOption => GetLocalizedString("ManagedMcpStdioOption", "Comando (stdio)");
+    public string ManagedMcpUrlOption => Get("ManagedMcpUrlOption");
+    public string ManagedMcpAddStdioButton => GetLocalizedString("ManagedMcpAddStdioButton", "Adicionar stdio");
+    public string ManagedMcpAddUrlButton => GetLocalizedString("ManagedMcpAddUrlButton", "Adicionar URL");
+    public string ManagedMcpRemoveButton => GetLocalizedString("ManagedMcpRemoveButton", "Remover");
+    public string ManagedMcpApplyButton => GetLocalizedString("ManagedMcpApplyButton", "Aplicar e atualizar");
+    public string ManagedMcpHint => GetLocalizedString("ManagedMcpHint", "Somente entradas válidas e habilitadas são aplicadas. Use apenas letras, números, '-' ou '_' no nome.");
+    public string SkillsTitle => Get("SkillsTitle");
+    public string SkillsDescription => GetLocalizedString("SkillsDescription", "Crie e abra skills globais no mesmo lugar em que você configura a integração do Codex.");
+    public string SkillNameLabel => GetLocalizedString("SkillNameLabel", "Nome da skill");
+    public string SkillDescriptionLabel => GetLocalizedString("SkillDescriptionLabel", "Descrição inicial");
+    public string CreateSkillButton => GetLocalizedString("CreateSkillButton", "Criar skill");
+    public string OpenSkillsFolderButton => GetLocalizedString("OpenSkillsFolderButton", "Abrir pasta de skills");
+    public string OpenConfigButton => GetLocalizedString("OpenConfigButton", "Abrir config");
+    public string SkillOpenButton => GetLocalizedString("SkillOpenButton", "Abrir");
+    public string RefreshStatusButton => GetLocalizedString("RefreshStatusButton", "Atualizar");
+    public string EnabledLabel => GetLocalizedString("EnabledLabel", "Habilitado");
+    public string NoSkillsDetected => GetLocalizedString("NoSkillsDetected", "Nenhuma skill detectada ainda.");
+    public string NoManagedMcpServers => GetLocalizedString("NoManagedMcpServers", "Nenhum servidor MCP gerenciado foi configurado.");
     public string VerbosityLabel => Get("VerbosityLabel");
     public string ApprovalPolicyLabel => Get("ApprovalPolicyLabel");
     public string RawOutputLabel => Get("RawOutputLabel");
@@ -369,6 +449,28 @@ public sealed class LocalizationService
     public string SendTooltip => Get("SendTooltip");
     public string HistoryTooltip => Get("HistoryTooltip");
     public string SettingsTooltip => Get("SettingsTooltip");
+    public string SetupCheckingTitle => GetLocalizedString("SetupCheckingTitle", "Verificando ambiente do Codex");
+    public string SetupCheckingSummary => GetLocalizedString("SetupCheckingSummary", "Validando executável, autenticação e configuração local.");
+    public string SetupMissingExecutableTitle => GetLocalizedString("SetupMissingExecutableTitle", "Codex CLI não encontrado");
+    public string SetupMissingExecutableSummary => GetLocalizedString("SetupMissingExecutableSummary", "Instale o Codex CLI e confirme o caminho do executável antes de usar a extensão.");
+    public string SetupMissingAuthTitle => GetLocalizedString("SetupMissingAuthTitle", "Codex encontrado, mas sem login");
+    public string SetupMissingAuthSummary => GetLocalizedString("SetupMissingAuthSummary", "Faça login no Codex CLI ou forneça um OPENAI_API_KEY antes de iniciar uma sessão.");
+    public string SetupReadyTitle => GetLocalizedString("SetupReadyTitle", "Codex pronto para uso");
+    public string SetupReadySummary => GetLocalizedString("SetupReadySummary", "A extensão já consegue iniciar sessões usando o Codex CLI local.");
+    public string SetupErrorTitle => GetLocalizedString("SetupErrorTitle", "A configuração do Codex precisa de atenção");
+    public string SetupErrorSummary => GetLocalizedString("SetupErrorSummary", "A extensão encontrou o Codex, mas não conseguiu validar o ambiente.");
+    public string SetupInstallButton => GetLocalizedString("SetupInstallButton", "Copiar comando de instalação");
+    public string SetupLoginButton => GetLocalizedString("SetupLoginButton", "Abrir login");
+    public string SetupRefreshButton => GetLocalizedString("SetupRefreshButton", "Atualizar status");
+    public string SetupSettingsButton => GetLocalizedString("SetupSettingsButton", "Abrir configurações");
+    public string SetupInstallHint => GetLocalizedString("SetupInstallHint", "Comando de instalação");
+    public string SetupExecutableHint => GetLocalizedString("SetupExecutableHint", "Executável");
+    public string SetupAuthHint => GetLocalizedString("SetupAuthHint", "Autenticação");
+    public string SetupVersionHint => GetLocalizedString("SetupVersionHint", "Versão");
+    public string SetupAuthFileLabel => GetLocalizedString("SetupAuthFileLabel", "Usando ~/.codex/auth.json");
+    public string SetupApiKeyLabel => GetLocalizedString("SetupApiKeyLabel", "Usando OPENAI_API_KEY");
+    public string SetupMissingAuthDetail => GetLocalizedString("SetupMissingAuthDetail", "Execute `codex login` em um terminal ou configure uma API key.");
+    public string SetupInstallDetail => GetLocalizedString("SetupInstallDetail", "Instalação recomendada: `npm install -g @openai/codex`");
     public string LocalButton => Get("LocalButton");
     public string RemoveAttachmentHoverLabel => Get("RemoveAttachmentHoverLabel");
     public string ApprovalCommandTitle => Get("ApprovalCommandTitle");
@@ -460,6 +562,13 @@ public sealed class LocalizationService
     {
         string value;
         return _strings.TryGetValue(key, out value) ? value : EnglishStrings[key];
+    }
+
+    private string GetLocalizedString(string key, string portugueseValue)
+    {
+        return Culture.TwoLetterISOLanguageName == "pt"
+            ? portugueseValue
+            : Get(key);
     }
 
     private static CultureInfo ResolveSupportedCulture(CultureInfo culture)

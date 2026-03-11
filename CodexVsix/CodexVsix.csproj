@@ -73,12 +73,25 @@
 
   <ItemGroup>
     <Reference Include="System.Design" />
+    <Reference Include="Microsoft.Web.WebView2.Core"
+               Condition="Exists('$(DevEnvDir)PrivateAssemblies\Microsoft.Web.WebView2.Core.dll')">
+      <HintPath>$(DevEnvDir)PrivateAssemblies\Microsoft.Web.WebView2.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Web.WebView2.Wpf"
+               Condition="Exists('$(DevEnvDir)PrivateAssemblies\Microsoft.Web.WebView2.Wpf.dll')">
+      <HintPath>$(DevEnvDir)PrivateAssemblies\Microsoft.Web.WebView2.Wpf.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
     <VSCTCompile Include="Commands.vsct">
       <ResourceName>Menus.ctmenu</ResourceName>
     </VSCTCompile>
+    <EmbeddedResource Include="UI\Assets\mermaid.min.js">
+      <LogicalName>CodexVsix.UI.Assets.mermaid.min.js</LogicalName>
+    </EmbeddedResource>
     <None Include="source.extension.vsixmanifest">
       <SubType>Designer</SubType>
     </None>

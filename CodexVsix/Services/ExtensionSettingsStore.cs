@@ -37,6 +37,8 @@ public sealed class ExtensionSettingsStore
             settings.EnvironmentVariables ??= "";
             settings.RawTomlOverrides ??= "";
             settings.CurrentThreadId ??= "";
+            settings.LastThreadWorkingDirectory ??= "";
+            settings.ManagedMcpServers ??= new();
             return settings;
         }
         catch

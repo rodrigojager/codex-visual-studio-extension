@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -27,6 +28,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private readonly LocalizationService _localization = new();
     private readonly ExtensionSettingsStore _settingsStore = new();
     private readonly CodexProcessService _codexProcessService = new();
+    private readonly CodexEnvironmentService _codexEnvironmentService = new();
     private readonly SolutionContextService _solutionContextService = new();
 
     private CancellationTokenSource? _cts;
@@ -36,11 +38,13 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private bool _showHistoryPanel;
     private bool _showSettingsPanel;
     private string _prompt = string.Empty;
+    private string _promptEditorText = string.Empty;
     private string _output = string.Empty;
     private string _currentMentionQuery = string.Empty;
     private string _selectedModel = string.Empty;
     private string _selectedReasoningEffort = string.Empty;
     private string _selectedVerbosity = string.Empty;
+    private string _promptDisplayText = string.Empty;
     private Geometry _contextRingGeometry = Geometry.Parse("M 8,1 A 7,7 0 1 1 7.99,1");
     private double _contextTokenBudget = DefaultContextTokenBudget;
     private double _lastKnownRemainingTokens = DefaultContextTokenBudget;
@@ -51,16 +55,21 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private CodexThreadSummary? _selectedThread;
     private bool _suppressThreadSelection;
     private string _renameThreadName = string.Empty;
+    private string _newSkillName = string.Empty;
+    private string _newSkillDescription = string.Empty;
+    private CodexEnvironmentStatus _codexEnvironmentStatus = new() { Stage = CodexSetupStage.Checking };
 
     public CodexToolWindowViewModel()
     {
+        ThreadHelper.ThrowIfNotOnUIThread();
         Settings = _settingsStore.Load();
 
-        if (string.IsNullOrWhiteSpace(Settings.DefaultModel)) Settings.DefaultModel = "gpt-5-codex";
+        if (string.IsNullOrWhiteSpace(Settings.DefaultModel)) Settings.DefaultModel = "gpt-5.4";
         if (string.IsNullOrWhiteSpace(Settings.ReasoningEffort)) Settings.ReasoningEffort = "high";
         if (string.IsNullOrWhiteSpace(Settings.ModelVerbosity)) Settings.ModelVerbosity = "medium";
         if (string.IsNullOrWhiteSpace(Settings.SandboxMode)) Settings.SandboxMode = "read-only";
         NormalizeSelectionSettings();
+        ApplyStartupWorkingDirectory();
 
         _selectedModel = Settings.DefaultModel;
         _selectedReasoningEffort = Settings.ReasoningEffort;
@@ -69,16 +78,27 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _codexProcessService.UserInputRequestHandler = HandleUserInputRequestAsync;
         _codexProcessService.ThreadCatalogChanged += HandleThreadCatalogChanged;
 
-        SendCommand = new DelegateCommand(Send, () => !IsBusy && !string.IsNullOrWhiteSpace(Prompt));
+        SendCommand = new DelegateCommand(Send, () => !IsBusy && IsCodexReady && !string.IsNullOrWhiteSpace(BuildEffectivePrompt()));
         CancelCommand = new DelegateCommand(Cancel, () => IsBusy);
-        SaveSettingsCommand = new DelegateCommand(SaveSettings);
+        SaveSettingsCommand = new DelegateCommand(ApplySettings);
         ClearOutputCommand = new DelegateCommand(() => Output = string.Empty);
         UseSolutionDirectoryCommand = new DelegateCommand(UseSolutionDirectory);
         OpenCodexConfigCommand = new DelegateCommand(OpenCodexConfig);
+        OpenCodexSkillsFolderCommand = new DelegateCommand(OpenCodexSkillsFolder);
+        OpenPathCommand = new DelegateCommand(OpenPath);
+        RefreshCodexStatusCommand = new DelegateCommand(RefreshCodexStatus);
+        RunCodexLoginCommand = new DelegateCommand(RunCodexLogin, _ => CanRunCodexLogin);
+        CopyCodexInstallCommand = new DelegateCommand(CopyCodexInstallCommandText);
+        OpenSettingsPanelCommand = new DelegateCommand(OpenSettingsPanel);
+        RefreshIntegrationsCommand = new DelegateCommand(RefreshIntegrations);
+        AddManagedMcpCommand = new DelegateCommand(AddManagedMcp);
+        RemoveManagedMcpCommand = new DelegateCommand(RemoveManagedMcp);
+        CreateSkillCommand = new DelegateCommand(CreateSkill, _ => CanCreateSkill());
         PasteImageCommand = new DelegateCommand(PasteImageFromClipboard);
         AddImageFileCommand = new DelegateCommand(AddAttachment);
         RemoveSelectedImageCommand = new DelegateCommand(RemoveSelectedImage, () => SelectedImagePath is not null);
         RemoveAttachmentCommand = new DelegateCommand(RemoveAttachment);
+        RemoveDetectedPromptSkillCommand = new DelegateCommand(RemoveDetectedPromptSkill);
         InsertSelectedMentionCommand = new DelegateCommand(InsertSelectedMention, () => SelectedMention is not null);
         ReuseHistoryPromptCommand = new DelegateCommand(ReuseHistoryPrompt, () => SelectedHistoryPrompt is not null);
         NewThreadCommand = new DelegateCommand(StartNewThread, () => !IsBusy);
@@ -100,6 +120,14 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             PromptHistory.Add(item);
         }
 
+        foreach (var server in Settings.ManagedMcpServers)
+        {
+            ManagedMcpServers.Add(CloneManagedMcpServer(server));
+        }
+
+        ManagedMcpServers.CollectionChanged += HandleManagedMcpServersChanged;
+        Skills.CollectionChanged += HandleSkillsChanged;
+
         RefreshMentions();
         UpdateContextEstimate();
         ThreadHelper.JoinableTaskFactory.RunAsync(InitializeAsync);
@@ -115,6 +143,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _userInputDecisionTcs?.TrySetResult(new JObject { ["answers"] = new JObject() });
         _cts?.Cancel();
         _cts?.Dispose();
+        ManagedMcpServers.CollectionChanged -= HandleManagedMcpServersChanged;
+        Skills.CollectionChanged -= HandleSkillsChanged;
         _codexProcessService.ThreadCatalogChanged -= HandleThreadCatalogChanged;
         _codexProcessService.Dispose();
     }
@@ -127,6 +157,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public ObservableCollection<CodexThreadSummary> Threads { get; } = new();
     public ObservableCollection<CodexAppSummary> Apps { get; } = new();
     public ObservableCollection<CodexMcpServerSummary> McpServers { get; } = new();
+    public ObservableCollection<CodexManagedMcpServer> ManagedMcpServers { get; } = new();
+    public ObservableCollection<CodexSkillSummary> Skills { get; } = new();
+    public ObservableCollection<CodexSkillSummary> DetectedPromptSkills { get; } = new();
     public ObservableCollection<ChatMessage> Messages { get; } = new();
     public ObservableCollection<SelectionOption> ModelOptions { get; } = new();
 
@@ -138,16 +171,33 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public SelectionOption[] SandboxModeOptions => _localization.CreateSandboxModeOptions();
 
+    public SelectionOption[] McpTransportOptions => new[]
+    {
+        new SelectionOption(_localization.ManagedMcpStdioOption, "stdio"),
+        new SelectionOption(_localization.ManagedMcpUrlOption, "url")
+    };
+
     public DelegateCommand SendCommand { get; }
     public DelegateCommand CancelCommand { get; }
     public DelegateCommand SaveSettingsCommand { get; }
     public DelegateCommand ClearOutputCommand { get; }
     public DelegateCommand UseSolutionDirectoryCommand { get; }
     public DelegateCommand OpenCodexConfigCommand { get; }
+    public DelegateCommand OpenCodexSkillsFolderCommand { get; }
+    public DelegateCommand OpenPathCommand { get; }
+    public DelegateCommand RefreshCodexStatusCommand { get; }
+    public DelegateCommand RunCodexLoginCommand { get; }
+    public DelegateCommand CopyCodexInstallCommand { get; }
+    public DelegateCommand OpenSettingsPanelCommand { get; }
+    public DelegateCommand RefreshIntegrationsCommand { get; }
+    public DelegateCommand AddManagedMcpCommand { get; }
+    public DelegateCommand RemoveManagedMcpCommand { get; }
+    public DelegateCommand CreateSkillCommand { get; }
     public DelegateCommand PasteImageCommand { get; }
     public DelegateCommand AddImageFileCommand { get; }
     public DelegateCommand RemoveSelectedImageCommand { get; }
     public DelegateCommand RemoveAttachmentCommand { get; }
+    public DelegateCommand RemoveDetectedPromptSkillCommand { get; }
     public DelegateCommand InsertSelectedMentionCommand { get; }
     public DelegateCommand ReuseHistoryPromptCommand { get; }
     public DelegateCommand NewThreadCommand { get; }
@@ -160,14 +210,13 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public string Prompt
     {
         get => _prompt;
-        set => RunOnUiThread(() =>
-        {
-            _prompt = value;
-            OnPropertyChanged();
-            RefreshMentions();
-            UpdateContextEstimate();
-            SendCommand.RaiseCanExecuteChanged();
-        });
+        set => RunOnUiThread(() => ApplyRawPrompt(value));
+    }
+
+    public string PromptEditorText
+    {
+        get => _promptEditorText;
+        set => RunOnUiThread(() => ApplyPromptEditorText(value));
     }
 
     public string Output
@@ -261,6 +310,130 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public bool HasCurrentUserInputPrompt => CurrentUserInputPrompt is not null;
 
+    public CodexEnvironmentStatus CodexEnvironmentStatus
+    {
+        get => _codexEnvironmentStatus;
+        private set
+        {
+            _codexEnvironmentStatus = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsCodexReady));
+            OnPropertyChanged(nameof(ShowCodexSetupCard));
+            OnPropertyChanged(nameof(CodexSetupTitle));
+            OnPropertyChanged(nameof(CodexSetupSummary));
+            OnPropertyChanged(nameof(CodexSetupDetail));
+            OnPropertyChanged(nameof(CodexSetupInstallCommand));
+            OnPropertyChanged(nameof(CodexSetupExecutablePath));
+            OnPropertyChanged(nameof(CodexSetupAuthenticationLabel));
+            OnPropertyChanged(nameof(CodexSetupVersionLabel));
+            OnPropertyChanged(nameof(ShowCodexSetupDetail));
+            OnPropertyChanged(nameof(ShowCodexSetupVersion));
+            OnPropertyChanged(nameof(NeedsCodexInstall));
+            OnPropertyChanged(nameof(NeedsCodexLogin));
+            OnPropertyChanged(nameof(CanRunCodexLogin));
+            SendCommand.RaiseCanExecuteChanged();
+            RunCodexLoginCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    public bool IsCodexReady => CodexEnvironmentStatus.IsReady;
+
+    public bool ShowCodexSetupCard => CodexEnvironmentStatus.Stage != CodexSetupStage.Unknown
+        && CodexEnvironmentStatus.Stage != CodexSetupStage.Ready;
+
+    public bool ShowCodexSetupDetail => !string.IsNullOrWhiteSpace(CodexSetupDetail);
+
+    public bool ShowCodexSetupVersion => !string.IsNullOrWhiteSpace(CodexSetupVersionLabel);
+
+    public bool NeedsCodexInstall => CodexEnvironmentStatus.Stage == CodexSetupStage.MissingExecutable;
+
+    public bool NeedsCodexLogin => CodexEnvironmentStatus.Stage == CodexSetupStage.MissingAuthentication;
+
+    public bool CanRunCodexLogin => CodexEnvironmentStatus.Stage == CodexSetupStage.MissingAuthentication
+        && !string.IsNullOrWhiteSpace(CodexEnvironmentStatus.ResolvedExecutablePath);
+
+    public string CodexSetupTitle => CodexEnvironmentStatus.Stage switch
+    {
+        CodexSetupStage.Checking => _localization.SetupCheckingTitle,
+        CodexSetupStage.MissingExecutable => _localization.SetupMissingExecutableTitle,
+        CodexSetupStage.MissingAuthentication => _localization.SetupMissingAuthTitle,
+        CodexSetupStage.Ready => _localization.SetupReadyTitle,
+        CodexSetupStage.Error => _localization.SetupErrorTitle,
+        _ => _localization.SetupCheckingTitle
+    };
+
+    public string CodexSetupSummary => CodexEnvironmentStatus.Stage switch
+    {
+        CodexSetupStage.Checking => _localization.SetupCheckingSummary,
+        CodexSetupStage.MissingExecutable => _localization.SetupMissingExecutableSummary,
+        CodexSetupStage.MissingAuthentication => _localization.SetupMissingAuthSummary,
+        CodexSetupStage.Ready => _localization.SetupReadySummary,
+        CodexSetupStage.Error => _localization.SetupErrorSummary,
+        _ => string.Empty
+    };
+
+    public string CodexSetupDetail => CodexEnvironmentStatus.Stage switch
+    {
+        CodexSetupStage.MissingExecutable => _localization.SetupInstallDetail,
+        CodexSetupStage.MissingAuthentication => _localization.SetupMissingAuthDetail,
+        CodexSetupStage.Error => CodexEnvironmentStatus.ErrorDetail,
+        _ => string.Empty
+    };
+
+    public string CodexSetupInstallCommand => CodexEnvironmentService.DefaultInstallCommand;
+
+    public string CodexSetupExecutablePath => string.IsNullOrWhiteSpace(CodexEnvironmentStatus.ResolvedExecutablePath)
+        ? CodexEnvironmentStatus.ConfiguredExecutablePath
+        : CodexEnvironmentStatus.ResolvedExecutablePath;
+
+    public string CodexSetupAuthenticationLabel
+    {
+        get
+        {
+            if (CodexEnvironmentStatus.HasApiKey)
+            {
+                return _localization.SetupApiKeyLabel;
+            }
+
+            if (CodexEnvironmentStatus.HasAuthFile)
+            {
+                return _localization.SetupAuthFileLabel;
+            }
+
+            return CodexEnvironmentStatus.AuthFilePath;
+        }
+    }
+
+    public string CodexSetupVersionLabel => CodexEnvironmentStatus.Version;
+
+    public bool HasManagedMcpServers => ManagedMcpServers.Count > 0;
+
+    public bool HasSkills => Skills.Count > 0;
+
+    public bool HasDetectedPromptSkills => DetectedPromptSkills.Count > 0;
+
+    public string PromptDisplayText
+    {
+        get => _promptDisplayText;
+        private set
+        {
+            if (string.Equals(_promptDisplayText, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _promptDisplayText = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasPromptDisplayText));
+        }
+    }
+
+    public bool HasPromptDisplayText => !string.IsNullOrWhiteSpace(PromptDisplayText);
+
+    public string CodexConfigPath => _solutionContextService.GetCodexConfigPath();
+
+    public string CodexSkillsDirectory => _solutionContextService.GetCodexSkillsDirectory();
+
     public string SelectedModel
     {
         get => _selectedModel;
@@ -352,7 +525,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public string CollaborationModeLabel => PlanModeEnabled ? _localization.AgentModeLabel : _localization.QuestionModeLabel;
 
-    public string SelectedModelLabel => GetOptionLabel(ModelOptions, SelectedModel, ModelOptions.FirstOrDefault()?.Label ?? "gpt-5-codex");
+    public string SelectedModelLabel => GetOptionLabel(ModelOptions, SelectedModel, ModelOptions.FirstOrDefault()?.Label ?? "gpt-5.4");
 
     public string SelectedReasoningEffortLabel => GetOptionLabel(ReasoningOptions, SelectedReasoningEffort, ReasoningOptions.FirstOrDefault(option => string.Equals(option.Value, "high", StringComparison.Ordinal))?.Label ?? "high");
 
@@ -421,6 +594,27 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
     }
 
+    public string NewSkillName
+    {
+        get => _newSkillName;
+        set
+        {
+            _newSkillName = value;
+            OnPropertyChanged();
+            CreateSkillCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    public string NewSkillDescription
+    {
+        get => _newSkillDescription;
+        set
+        {
+            _newSkillDescription = value;
+            OnPropertyChanged();
+        }
+    }
+
     private string? _selectedMention;
     public string? SelectedMention
     {
@@ -459,10 +653,19 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private async Task SendAsync()
     {
-        if (IsBusy || string.IsNullOrWhiteSpace(Prompt))
+        var promptToSend = BuildEffectivePrompt();
+        if (IsBusy || string.IsNullOrWhiteSpace(promptToSend))
         {
             return;
         }
+
+        if (!IsCodexReady)
+        {
+            AppendOutput("[setup] " + CodexSetupSummary + Environment.NewLine);
+            return;
+        }
+
+        EnsureThreadMatchesWorkingDirectory();
 
         if (string.IsNullOrWhiteSpace(Settings.CurrentThreadId))
         {
@@ -470,15 +673,14 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
 
         SaveSettings();
-        AddPromptToHistory(Prompt);
+        AddPromptToHistory(promptToSend);
         ClearPersistedEventMessages();
-        AddUserMessage(Prompt.Trim());
+        AddUserMessage(promptToSend.Trim());
 
         IsBusy = true;
         _cts = new CancellationTokenSource();
         _currentAssistantMessage = null;
         ClearTransientStatusMessage();
-        var promptToSend = Prompt;
         Prompt = string.Empty;
 
         try
@@ -499,6 +701,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             }
 
             Settings.CurrentThreadId = _codexProcessService.CurrentThreadId ?? Settings.CurrentThreadId;
+            Settings.LastThreadWorkingDirectory = Settings.WorkingDirectory;
             SaveSettings();
             await RefreshThreadsAsync(Settings.CurrentThreadId).ConfigureAwait(false);
             await RefreshServerSurfacesAsync().ConfigureAwait(false);
@@ -530,12 +733,32 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void SaveSettings()
     {
+        Settings.ManagedMcpServers = ManagedMcpServers
+            .Select(CloneManagedMcpServer)
+            .ToList();
         Settings.DefaultModel = SelectedModel;
         Settings.ReasoningEffort = SelectedReasoningEffort;
         Settings.ModelVerbosity = SelectedVerbosity;
         Settings.ApprovalPolicy = SelectedApprovalPolicy;
         Settings.SandboxMode = SelectedSandboxMode;
         _settingsStore.Save(Settings);
+    }
+
+    private void ApplySettings()
+    {
+        ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+        {
+            SaveSettings();
+            await RefreshCodexStatusAsync().ConfigureAwait(false);
+            if (!IsCodexReady)
+            {
+                ClearServerSurfaces();
+                return;
+            }
+
+            await RefreshModelOptionsAsync().ConfigureAwait(false);
+            await RefreshServerSurfacesAsync(forceSkillReload: true).ConfigureAwait(false);
+        });
     }
 
     private void Cancel()
@@ -637,17 +860,89 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ThreadHelper.JoinableTaskFactory.Run(async delegate
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-            Settings.WorkingDirectory = _solutionContextService.GetBestWorkingDirectory();
+            ApplyWorkingDirectory(_solutionContextService.GetBestWorkingDirectory(), resetConversation: true);
             OnPropertyChanged(nameof(Settings));
+            SaveSettings();
             await RefreshThreadsAsync(Settings.CurrentThreadId).ConfigureAwait(false);
             await RefreshModelOptionsAsync().ConfigureAwait(false);
             await RefreshServerSurfacesAsync().ConfigureAwait(false);
         });
     }
 
+    private void ApplyStartupWorkingDirectory()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        var solutionDirectory = _solutionContextService.TryGetBestWorkspaceDirectory();
+        if (string.IsNullOrWhiteSpace(solutionDirectory) || !Directory.Exists(solutionDirectory))
+        {
+            return;
+        }
+
+        if (string.Equals(Settings.WorkingDirectory, solutionDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        ApplyWorkingDirectory(solutionDirectory, resetConversation: true);
+        OnPropertyChanged(nameof(Settings));
+        _settingsStore.Save(Settings);
+    }
+
+    private void ApplyWorkingDirectory(string workingDirectory, bool resetConversation)
+    {
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            return;
+        }
+
+        Settings.WorkingDirectory = workingDirectory;
+        if (!resetConversation)
+        {
+            return;
+        }
+
+        Settings.CurrentThreadId = string.Empty;
+        Settings.LastThreadWorkingDirectory = workingDirectory;
+        _codexProcessService.ResetThread();
+        RunOnUiThread(() =>
+        {
+            _suppressThreadSelection = true;
+            SelectedThread = null;
+            _suppressThreadSelection = false;
+            RenameThreadName = string.Empty;
+            Messages.Clear();
+            Output = string.Empty;
+        });
+    }
+
+    private void EnsureThreadMatchesWorkingDirectory()
+    {
+        var currentWorkingDirectory = (Settings.WorkingDirectory ?? string.Empty).Trim();
+        var lastThreadWorkingDirectory = (Settings.LastThreadWorkingDirectory ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(currentWorkingDirectory))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(Settings.CurrentThreadId))
+        {
+            Settings.LastThreadWorkingDirectory = currentWorkingDirectory;
+            return;
+        }
+
+        if (string.Equals(currentWorkingDirectory, lastThreadWorkingDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        Settings.CurrentThreadId = string.Empty;
+        Settings.LastThreadWorkingDirectory = currentWorkingDirectory;
+        _codexProcessService.ResetThread();
+    }
+
     private void NormalizeSelectionSettings()
     {
-        Settings.DefaultModel = EnsureOptionValue(NormalizeModelValue(Settings.DefaultModel), CreateFallbackModelOptions(), "gpt-5-codex");
+        Settings.DefaultModel = EnsureOptionValue(NormalizeModelValue(Settings.DefaultModel), CreateFallbackModelOptions(), "gpt-5.4");
         Settings.ReasoningEffort = EnsureOptionValue(NormalizeReasoningEffortValue(Settings.ReasoningEffort), ReasoningOptions, "high");
         Settings.ModelVerbosity = EnsureOptionValue(Settings.ModelVerbosity, VerbosityOptions, "medium");
         Settings.SandboxMode = EnsureOptionValue(Settings.SandboxMode, SandboxModeOptions, "read-only");
@@ -675,10 +970,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         var normalized = (value ?? string.Empty).Trim();
         switch (normalized.ToLowerInvariant())
         {
-            case "gpt-5.4":
             case "gpt-5.4-codex":
             case "gpt-5-codex":
-                return "gpt-5-codex";
+                return "gpt-5.4";
             case "gpt-5.2 codex":
             case "gpt-5.2-codex":
                 return "gpt-5.2-codex";
@@ -724,6 +1018,133 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         });
     }
 
+    private void OpenSettingsPanel()
+    {
+        ShowSettingsPanel = true;
+        ShowHistoryPanel = false;
+    }
+
+    private void OpenCodexSkillsFolder()
+    {
+        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            _solutionContextService.OpenCodexSkillsDirectory();
+        });
+    }
+
+    private void OpenPath(object? parameter)
+    {
+        if (parameter is not string path || string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            _solutionContextService.OpenPath(path);
+        });
+    }
+
+    private void RefreshIntegrations()
+    {
+        ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+        {
+            await RefreshCodexStatusAsync().ConfigureAwait(false);
+            if (!IsCodexReady)
+            {
+                ClearServerSurfaces();
+                return;
+            }
+
+            await RefreshServerSurfacesAsync(forceSkillReload: true).ConfigureAwait(false);
+        });
+    }
+
+    private void RefreshCodexStatus()
+    {
+        ThreadHelper.JoinableTaskFactory.RunAsync(RefreshCodexStatusAsync);
+    }
+
+    private void RunCodexLogin(object? _)
+    {
+        if (!CanRunCodexLogin)
+        {
+            return;
+        }
+
+        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            _codexEnvironmentService.LaunchLoginTerminal(CodexEnvironmentStatus.ResolvedExecutablePath);
+        });
+    }
+
+    private void CopyCodexInstallCommandText(object? _)
+    {
+        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            Clipboard.SetText(CodexSetupInstallCommand);
+        });
+    }
+
+    private void AddManagedMcp(object? parameter)
+    {
+        var transport = string.Equals(parameter as string, "url", StringComparison.OrdinalIgnoreCase)
+            ? "url"
+            : "stdio";
+
+        ManagedMcpServers.Add(new CodexManagedMcpServer
+        {
+            Enabled = true,
+            Name = transport == "url" ? "novo-mcp-url" : "novo-mcp",
+            TransportType = transport
+        });
+    }
+
+    private void RemoveManagedMcp(object? parameter)
+    {
+        if (parameter is CodexManagedMcpServer server)
+        {
+            ManagedMcpServers.Remove(server);
+        }
+    }
+
+    private void CreateSkill(object? _)
+    {
+        ThreadHelper.JoinableTaskFactory.RunAsync(CreateSkillAsync);
+    }
+
+    private async Task CreateSkillAsync()
+    {
+        if (!CanCreateSkill())
+        {
+            return;
+        }
+
+        try
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            var skillFile = _solutionContextService.CreateSkillTemplate(NewSkillName, NewSkillDescription);
+            NewSkillName = string.Empty;
+            NewSkillDescription = string.Empty;
+            _codexProcessService.InvalidateSkillsCache();
+            _solutionContextService.OpenPath(skillFile);
+            await RefreshServerSurfacesAsync(forceSkillReload: true).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            AppendOutput("[skills] " + ex.Message + Environment.NewLine);
+        }
+    }
+
+    private bool CanCreateSkill()
+    {
+        return SolutionContextService.IsValidSkillName(NewSkillName);
+    }
+
     private void ToggleHistoryPanel()
     {
         ShowHistoryPanel = !ShowHistoryPanel;
@@ -744,9 +1165,16 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private async Task InitializeAsync()
     {
+        await RefreshCodexStatusAsync().ConfigureAwait(false);
+        if (!IsCodexReady)
+        {
+            ClearServerSurfaces();
+            return;
+        }
+
         await RefreshModelOptionsAsync().ConfigureAwait(false);
         await RefreshThreadsAsync(Settings.CurrentThreadId).ConfigureAwait(false);
-        await RefreshServerSurfacesAsync().ConfigureAwait(false);
+        await RefreshServerSurfacesAsync(forceSkillReload: true).ConfigureAwait(false);
 
         if (!string.IsNullOrWhiteSpace(Settings.CurrentThreadId))
         {
@@ -754,8 +1182,45 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
     }
 
+    private async Task RefreshCodexStatusAsync()
+    {
+        try
+        {
+            var status = await _codexEnvironmentService.InspectAsync(Settings, CancellationToken.None).ConfigureAwait(false);
+            RunOnUiThread(() => CodexEnvironmentStatus = status);
+        }
+        catch (Exception ex)
+        {
+            RunOnUiThread(() => CodexEnvironmentStatus = new CodexEnvironmentStatus
+            {
+                Stage = CodexSetupStage.Error,
+                ConfiguredExecutablePath = Settings.CodexExecutablePath ?? string.Empty,
+                AuthFilePath = _codexEnvironmentService.GetAuthFilePath(),
+                ErrorDetail = ex.Message
+            });
+        }
+    }
+
+    private void ClearServerSurfaces()
+    {
+        RunOnUiThread(() =>
+        {
+            Apps.Clear();
+            McpServers.Clear();
+            Skills.Clear();
+            DetectedPromptSkills.Clear();
+            PromptDisplayText = string.Empty;
+            OnPropertyChanged(nameof(HasDetectedPromptSkills));
+        });
+    }
+
     private async Task RefreshModelOptionsAsync()
     {
+        if (!IsCodexReady)
+        {
+            return;
+        }
+
         try
         {
             var models = await _codexProcessService.ListModelsAsync(Settings, CancellationToken.None).ConfigureAwait(false);
@@ -807,13 +1272,20 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
     }
 
-    private async Task RefreshServerSurfacesAsync()
+    private async Task RefreshServerSurfacesAsync(bool forceSkillReload = false)
     {
+        if (!IsCodexReady)
+        {
+            ClearServerSurfaces();
+            return;
+        }
+
         try
         {
             var appsTask = _codexProcessService.ListAppsAsync(Settings, CancellationToken.None);
             var mcpTask = _codexProcessService.ListMcpServersAsync(Settings, CancellationToken.None);
-            await Task.WhenAll(appsTask, mcpTask).ConfigureAwait(false);
+            var skillsTask = _codexProcessService.ListSkillsAsync(Settings, CancellationToken.None, forceSkillReload);
+            await Task.WhenAll(appsTask, mcpTask, skillsTask).ConfigureAwait(false);
 
             RunOnUiThread(() =>
             {
@@ -827,6 +1299,12 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 foreach (var server in mcpTask.Result)
                 {
                     McpServers.Add(server);
+                }
+
+                Skills.Clear();
+                foreach (var skill in skillsTask.Result)
+                {
+                    Skills.Add(skill);
                 }
             });
         }
@@ -852,6 +1330,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             }
 
             Settings.CurrentThreadId = conversation.Thread.ThreadId;
+            Settings.LastThreadWorkingDirectory = Settings.WorkingDirectory;
             SaveSettings();
 
             RunOnUiThread(() =>
@@ -860,7 +1339,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 Messages.Clear();
                 foreach (var message in conversation.Messages)
                 {
-                    Messages.Add(new ChatMessage(message.IsUser, message.Text, message.IsEvent, message.Title, message.Detail));
+                    Messages.Add(CreateDisplayMessage(message.IsUser, message.Text, message.IsEvent, message.Title, message.Detail));
                 }
 
                 Output = string.Empty;
@@ -887,6 +1366,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         CurrentApprovalPrompt = null;
         _currentAssistantMessage = null;
         Settings.CurrentThreadId = string.Empty;
+        Settings.LastThreadWorkingDirectory = Settings.WorkingDirectory;
         _codexProcessService.ResetThread();
         SaveSettings();
 
@@ -936,7 +1416,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         return new[]
         {
-            new SelectionOption("GPT-5.4", "gpt-5-codex"),
+            new SelectionOption("GPT-5.4", "gpt-5.4"),
             new SelectionOption("GPT-5.2 Codex", "gpt-5.2-codex"),
             new SelectionOption("GPT-5.2", "gpt-5.2"),
             new SelectionOption("GPT-5", "gpt-5")
@@ -945,7 +1425,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void RefreshMentions()
     {
-        var mention = ExtractCurrentMention(Prompt);
+        var mention = ExtractCurrentMention(PromptEditorText);
         CurrentMentionQuery = mention;
         MentionSuggestions.Clear();
 
@@ -955,7 +1435,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             return;
         }
 
-        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             foreach (var file in _solutionContextService.FindSolutionFiles(mention))
@@ -967,6 +1447,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         });
     }
 
+    private void RefreshDetectedPromptSkills()
+    {
+        ApplyRawPrompt(_prompt);
+    }
+
     private void InsertSelectedMention()
     {
         if (string.IsNullOrWhiteSpace(SelectedMention))
@@ -974,20 +1459,20 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             return;
         }
 
-        var mention = ExtractCurrentMention(Prompt);
+        var mention = ExtractCurrentMention(PromptEditorText);
         if (string.IsNullOrWhiteSpace(mention))
         {
             return;
         }
 
         var suffix = "@" + mention;
-        var idx = Prompt.LastIndexOf(suffix, StringComparison.OrdinalIgnoreCase);
+        var idx = PromptEditorText.LastIndexOf(suffix, StringComparison.OrdinalIgnoreCase);
         if (idx < 0)
         {
             return;
         }
 
-        Prompt = Prompt.Substring(0, idx) + "@" + SelectedMention + " " + Prompt.Substring(idx + suffix.Length);
+        PromptEditorText = PromptEditorText.Substring(0, idx) + "@" + SelectedMention + " " + PromptEditorText.Substring(idx + suffix.Length);
         MentionSuggestions.Clear();
         CurrentMentionQuery = string.Empty;
     }
@@ -1110,6 +1595,71 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         return prompt;
     }
 
+    private void HandleManagedMcpServersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasManagedMcpServers));
+    }
+
+    private void HandleSkillsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasSkills));
+        RefreshDetectedPromptSkills();
+        RefreshDisplayedUserMessages();
+    }
+
+    private static CodexManagedMcpServer CloneManagedMcpServer(CodexManagedMcpServer? server)
+    {
+        if (server is null)
+        {
+            return new CodexManagedMcpServer();
+        }
+
+        return new CodexManagedMcpServer
+        {
+            Enabled = server.Enabled,
+            Name = server.Name ?? string.Empty,
+            TransportType = string.IsNullOrWhiteSpace(server.TransportType) ? "stdio" : server.TransportType,
+            Command = server.Command ?? string.Empty,
+            Arguments = server.Arguments ?? string.Empty,
+            Url = server.Url ?? string.Empty
+        };
+    }
+
+    private ChatMessage CreateDisplayMessage(bool isUser, string text, bool isEvent = false, string? title = null, string? detail = null)
+    {
+        var message = new ChatMessage(isUser, text, isEvent, title, detail);
+        DecorateUserMessageDisplay(message);
+        return message;
+    }
+
+    private void RefreshDisplayedUserMessages()
+    {
+        RunOnUiThread(() =>
+        {
+            foreach (var message in Messages)
+            {
+                DecorateUserMessageDisplay(message);
+            }
+        });
+    }
+
+    private void DecorateUserMessageDisplay(ChatMessage message)
+    {
+        if (!message.IsUser || message.IsEvent)
+        {
+            message.ApplyPromptSkillDisplay(System.Array.Empty<string>(), message.Text);
+            return;
+        }
+
+        var availableSkillNames = new HashSet<string>(
+            Skills.Where(skill => skill.IsEnabled && !string.IsNullOrWhiteSpace(skill.Name))
+                .Select(skill => skill.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        var formattedPrompt = FormatPromptSkillDisplay(message.Text, availableSkillNames);
+        message.ApplyPromptSkillDisplay(formattedPrompt.SkillNames, formattedPrompt.DisplayText);
+    }
+
     private void ResolveUserInput()
     {
         var prompt = CurrentUserInputPrompt;
@@ -1173,7 +1723,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            Messages.Add(new ChatMessage(true, text));
+            Messages.Add(CreateDisplayMessage(true, text));
         });
     }
 
@@ -1181,7 +1731,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            Messages.Add(new ChatMessage(false, text));
+            Messages.Add(CreateDisplayMessage(false, text));
         });
     }
 
@@ -1191,7 +1741,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             if (_currentTransientStatusMessage is null)
             {
-                _currentTransientStatusMessage = new ChatMessage(message.IsUser, message.Text, message.IsEvent, message.Title, message.Detail);
+                _currentTransientStatusMessage = CreateDisplayMessage(message.IsUser, message.Text, message.IsEvent, message.Title, message.Detail);
                 Messages.Add(_currentTransientStatusMessage);
             }
             else
@@ -1212,7 +1762,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             ClearTransientStatusMessage();
             if (_currentAssistantMessage is null)
             {
-                _currentAssistantMessage = new ChatMessage(false, string.Empty);
+                _currentAssistantMessage = CreateDisplayMessage(false, string.Empty);
                 Messages.Add(_currentAssistantMessage);
             }
 
@@ -1302,9 +1852,124 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private void AppendFileReferenceToPrompt(string filePath)
     {
         var fileReference = " @" + filePath;
-        Prompt = string.IsNullOrWhiteSpace(Prompt)
+        PromptEditorText = string.IsNullOrWhiteSpace(PromptEditorText)
             ? ("@" + filePath)
-            : (Prompt.TrimEnd() + fileReference);
+            : (PromptEditorText.TrimEnd() + fileReference);
+    }
+
+    private void ApplyRawPrompt(string? rawPrompt)
+    {
+        var availableSkills = GetAvailableSkillsByName();
+        var formattedPrompt = FormatPromptSkillDisplay(rawPrompt ?? string.Empty, new HashSet<string>(availableSkills.Keys, StringComparer.OrdinalIgnoreCase), preserveWhitespace: true);
+
+        _promptEditorText = formattedPrompt.DisplayText;
+        SyncDetectedPromptSkills(formattedPrompt.SkillNames, availableSkills);
+        PromptDisplayText = _promptEditorText;
+        _prompt = BuildEffectivePrompt();
+
+        OnPropertyChanged(nameof(Prompt));
+        OnPropertyChanged(nameof(PromptEditorText));
+        RefreshMentions();
+        UpdateContextEstimate();
+        SendCommand.RaiseCanExecuteChanged();
+    }
+
+    private void ApplyPromptEditorText(string? editorText)
+    {
+        var availableSkills = GetAvailableSkillsByName();
+        var formattedPrompt = FormatPromptSkillDisplay(editorText ?? string.Empty, new HashSet<string>(availableSkills.Keys, StringComparer.OrdinalIgnoreCase), preserveWhitespace: true);
+        var mergedSkillNames = DetectedPromptSkills
+            .Where(skill => skill.IsEnabled && !string.IsNullOrWhiteSpace(skill.Name))
+            .Select(skill => skill.Name)
+            .Concat(formattedPrompt.SkillNames)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        _promptEditorText = formattedPrompt.DisplayText;
+        SyncDetectedPromptSkills(mergedSkillNames, availableSkills);
+        PromptDisplayText = _promptEditorText;
+        _prompt = BuildEffectivePrompt();
+
+        OnPropertyChanged(nameof(Prompt));
+        OnPropertyChanged(nameof(PromptEditorText));
+        RefreshMentions();
+        UpdateContextEstimate();
+        SendCommand.RaiseCanExecuteChanged();
+    }
+
+    private IReadOnlyDictionary<string, CodexSkillSummary> GetAvailableSkillsByName()
+    {
+        return Skills
+            .Where(skill => skill.IsEnabled && !string.IsNullOrWhiteSpace(skill.Name))
+            .ToDictionary(skill => skill.Name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void SyncDetectedPromptSkills(IEnumerable<string> skillNames, IReadOnlyDictionary<string, CodexSkillSummary> availableSkills)
+    {
+        var selectedSkills = new List<CodexSkillSummary>();
+        var uniqueSkillNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var skillName in skillNames)
+        {
+            if (string.IsNullOrWhiteSpace(skillName) || !uniqueSkillNames.Add(skillName))
+            {
+                continue;
+            }
+
+            if (availableSkills.TryGetValue(skillName, out var skill))
+            {
+                selectedSkills.Add(skill);
+            }
+        }
+
+        DetectedPromptSkills.Clear();
+        foreach (var skill in selectedSkills)
+        {
+            DetectedPromptSkills.Add(skill);
+        }
+
+        OnPropertyChanged(nameof(HasDetectedPromptSkills));
+    }
+
+    private string BuildEffectivePrompt()
+    {
+        var skillPrefix = string.Join(
+            " ",
+            DetectedPromptSkills
+                .Where(skill => skill.IsEnabled && !string.IsNullOrWhiteSpace(skill.Name))
+                .Select(skill => "/" + skill.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        if (string.IsNullOrWhiteSpace(skillPrefix))
+        {
+            return _promptEditorText;
+        }
+
+        if (string.IsNullOrWhiteSpace(_promptEditorText))
+        {
+            return skillPrefix;
+        }
+
+        return skillPrefix + " " + _promptEditorText.TrimStart();
+    }
+
+    private void RemoveDetectedPromptSkill(object? parameter)
+    {
+        if (parameter is not CodexSkillSummary skillToRemove)
+        {
+            return;
+        }
+
+        var remainingSkills = DetectedPromptSkills
+            .Where(skill => !string.Equals(skill.Name, skillToRemove.Name, StringComparison.OrdinalIgnoreCase))
+            .Select(skill => skill.Name)
+            .ToArray();
+
+        SyncDetectedPromptSkills(remainingSkills, GetAvailableSkillsByName());
+        _prompt = BuildEffectivePrompt();
+        OnPropertyChanged(nameof(Prompt));
+        UpdateContextEstimate();
+        SendCommand.RaiseCanExecuteChanged();
     }
 
     private static bool IsImageFile(string path)
@@ -1348,6 +2013,147 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
 
         return tail.Trim();
+    }
+
+    private static IReadOnlyList<string> ExtractPromptSkillNames(string prompt)
+    {
+        var detectedNames = new List<string>();
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return detectedNames;
+        }
+
+        var uniqueNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < prompt.Length; index++)
+        {
+            if (prompt[index] != '/')
+            {
+                continue;
+            }
+
+            if (index > 0 && !char.IsWhiteSpace(prompt[index - 1]))
+            {
+                continue;
+            }
+
+            var start = index + 1;
+            var end = start;
+            while (end < prompt.Length && IsSkillNameCharacter(prompt[end]))
+            {
+                end++;
+            }
+
+            if (end <= start)
+            {
+                continue;
+            }
+
+            var skillName = prompt.Substring(start, end - start);
+            if (uniqueNames.Add(skillName))
+            {
+                detectedNames.Add(skillName);
+            }
+        }
+
+        return detectedNames;
+    }
+
+    private static (IReadOnlyList<string> SkillNames, string DisplayText) FormatPromptSkillDisplay(string prompt, ISet<string> availableSkillNames, bool preserveWhitespace = false)
+    {
+        var detectedNames = new List<string>();
+        if (string.IsNullOrWhiteSpace(prompt) || availableSkillNames.Count == 0)
+        {
+            return (detectedNames, prompt);
+        }
+
+        var uniqueNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var builder = new System.Text.StringBuilder(prompt.Length);
+
+        for (var index = 0; index < prompt.Length; index++)
+        {
+            if (prompt[index] == '/'
+                && (index == 0 || char.IsWhiteSpace(prompt[index - 1])))
+            {
+                var start = index + 1;
+                var end = start;
+                while (end < prompt.Length && IsSkillNameCharacter(prompt[end]))
+                {
+                    end++;
+                }
+
+                if (end > start)
+                {
+                    var skillName = prompt.Substring(start, end - start);
+                    if (availableSkillNames.Contains(skillName))
+                    {
+                        if (uniqueNames.Add(skillName))
+                        {
+                            detectedNames.Add(skillName);
+                        }
+
+                        index = preserveWhitespace && end < prompt.Length && (prompt[end] == ' ' || prompt[end] == '\t')
+                            ? end
+                            : end - 1;
+                        continue;
+                    }
+                }
+            }
+
+            builder.Append(prompt[index]);
+        }
+
+        return (detectedNames, preserveWhitespace ? builder.ToString() : CleanupPromptDisplayText(builder.ToString()));
+    }
+
+    private static string CleanupPromptDisplayText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var normalized = text.Replace("\r\n", "\n");
+        var lines = normalized.Split('\n');
+        var cleanedLines = lines
+            .Select(CollapseInlineWhitespace)
+            .ToArray();
+
+        return string.Join(Environment.NewLine, cleanedLines).Trim();
+    }
+
+    private static string CollapseInlineWhitespace(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(text.Length);
+        var previousWasWhitespace = false;
+
+        foreach (var character in text)
+        {
+            if (character == ' ' || character == '\t')
+            {
+                if (!previousWasWhitespace)
+                {
+                    builder.Append(' ');
+                    previousWasWhitespace = true;
+                }
+
+                continue;
+            }
+
+            builder.Append(character);
+            previousWasWhitespace = false;
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private static bool IsSkillNameCharacter(char value)
+    {
+        return char.IsLetterOrDigit(value) || value == '-' || value == '_' || value == '.';
     }
 
     private static string SaveBitmapToTempPng(BitmapSource bitmapSource)

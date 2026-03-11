@@ -28,6 +28,7 @@ packages/
 
 # Local Codex/generated files
 .codex-app-server-schema/
+build-markdown.log
 
 # OS files
 Thumbs.db

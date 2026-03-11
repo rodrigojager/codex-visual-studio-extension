@@ -16,7 +16,9 @@ public sealed class CodexExtensionSettings
     public string EnvironmentVariables { get; set; } = "";
     public string RawTomlOverrides { get; set; } = "";
     public string CurrentThreadId { get; set; } = "";
+    public string LastThreadWorkingDirectory { get; set; } = "";
     public List<string> PromptHistory { get; set; } = new();
+    public List<CodexManagedMcpServer> ManagedMcpServers { get; set; } = new();
     public bool StreamOutput { get; set; } = true;
     public bool ReuseSession { get; set; } = false;
     public bool AutoApprovePowerShell { get; set; } = false;

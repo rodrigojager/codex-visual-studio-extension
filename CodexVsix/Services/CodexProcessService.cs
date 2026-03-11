@@ -17,6 +17,7 @@ public sealed class CodexProcessService : IDisposable
 {
     private static readonly Regex MentionRegex = new(@"(?<!\S)@(?<value>\S+)", RegexOptions.Compiled);
     private static readonly Regex SkillRegex = new(@"(?<!\S)\$(?<value>[A-Za-z0-9][A-Za-z0-9._-]*)", RegexOptions.Compiled);
+    private const string ExtensionContextPrefix = "Contexto da extensão: o diretório de trabalho atual do projeto aberto é \"";
 
     private readonly SemaphoreSlim _executionGate = new(1, 1);
     private readonly object _syncRoot = new();
@@ -343,6 +344,72 @@ public sealed class CodexProcessService : IDisposable
         }
 
         return servers;
+    }
+
+    public async Task<IReadOnlyList<CodexSkillSummary>> ListSkillsAsync(CodexExtensionSettings settings, CancellationToken cancellationToken, bool forceReload = false)
+    {
+        var workingDirectory = ResolveWorkingDirectory(settings.WorkingDirectory);
+        await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
+
+        var response = await SendRequestAsync(
+            "skills/list",
+            new { cwds = new[] { workingDirectory }, forceReload },
+            cancellationToken).ConfigureAwait(false);
+
+        var homeSkillsDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".codex",
+            "skills");
+
+        var summaries = new List<CodexSkillSummary>();
+        var entries = response?["data"] as JArray;
+        if (entries is null)
+        {
+            return summaries;
+        }
+
+        foreach (var entry in entries)
+        {
+            var skills = entry["skills"] as JArray;
+            if (skills is null)
+            {
+                continue;
+            }
+
+            foreach (var skill in skills)
+            {
+                var name = skill["name"]?.Value<string>();
+                var path = skill["path"]?.Value<string>();
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                var isSystem = path.IndexOf(".system", StringComparison.OrdinalIgnoreCase) >= 0;
+                summaries.Add(new CodexSkillSummary
+                {
+                    Name = name!,
+                    Path = path!,
+                    IsEnabled = skill["enabled"]?.Value<bool>() ?? true,
+                    IsSystem = isSystem,
+                    ScopeLabel = BuildSkillScopeLabel(path!, workingDirectory, homeSkillsDirectory, isSystem)
+                });
+            }
+        }
+
+        return summaries
+            .OrderBy(skill => skill.IsSystem)
+            .ThenBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public void InvalidateSkillsCache()
+    {
+        lock (_syncRoot)
+        {
+            _skillsCacheKey = null;
+            _skillsByName.Clear();
+        }
     }
 
     private async Task EnsureServerReadyAsync(CodexExtensionSettings settings, string workingDirectory, CancellationToken cancellationToken)
@@ -1078,6 +1145,11 @@ public sealed class CodexProcessService : IDisposable
             new
             {
                 type = "text",
+                text = "Contexto da extensão: o diretório de trabalho atual do projeto aberto é \"" + Path.GetFullPath(workingDirectory) + "\"."
+            },
+            new
+            {
+                type = "text",
                 text = prompt
             }
         };
@@ -1362,7 +1434,7 @@ public sealed class CodexProcessService : IDisposable
             {
                 case "text":
                     var text = item?["text"]?.Value<string>();
-                    if (!string.IsNullOrWhiteSpace(text))
+                    if (!string.IsNullOrWhiteSpace(text) && !text.TrimStart().StartsWith(ExtensionContextPrefix, StringComparison.Ordinal))
                     {
                         segments.Add(text.Trim());
                     }
@@ -2034,6 +2106,12 @@ public sealed class CodexProcessService : IDisposable
     {
         var args = new List<string> { "app-server", "--listen", "stdio://" };
 
+        foreach (var line in BuildManagedMcpOverrideLines(settings))
+        {
+            args.Add("-c");
+            args.Add(line);
+        }
+
         if (!string.IsNullOrWhiteSpace(settings.RawTomlOverrides))
         {
             foreach (var line in settings.RawTomlOverrides.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
@@ -2059,10 +2137,106 @@ public sealed class CodexProcessService : IDisposable
         return string.Join("\n", new[]
         {
             ResolveExecutablePath(settings.CodexExecutablePath),
+            string.Join("\n", BuildManagedMcpOverrideLines(settings)),
             settings.RawTomlOverrides ?? string.Empty,
             settings.AdditionalArguments ?? string.Empty,
             settings.EnvironmentVariables ?? string.Empty
         });
+    }
+
+    private static IEnumerable<string> BuildManagedMcpOverrideLines(CodexExtensionSettings settings)
+    {
+        if (settings.ManagedMcpServers is null)
+        {
+            yield break;
+        }
+
+        foreach (var server in settings.ManagedMcpServers)
+        {
+            if (server is null || !server.Enabled)
+            {
+                continue;
+            }
+
+            var name = (server.Name ?? string.Empty).Trim();
+            if (!IsValidManagedMcpName(name))
+            {
+                continue;
+            }
+
+            if (string.Equals(server.TransportType, "url", StringComparison.OrdinalIgnoreCase))
+            {
+                var url = (server.Url ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    continue;
+                }
+
+                yield return "[mcp_servers." + name + "]";
+                yield return "url = " + EncodeTomlString(url);
+                continue;
+            }
+
+            var command = (server.Command ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                continue;
+            }
+
+            yield return "[mcp_servers." + name + "]";
+            yield return "command = " + EncodeTomlString(command);
+
+            var args = SplitManagedMcpArguments(server.Arguments).ToList();
+            if (args.Count > 0)
+            {
+                yield return "args = [" + string.Join(", ", args.Select(EncodeTomlString)) + "]";
+            }
+        }
+    }
+
+    private static bool IsValidManagedMcpName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        return name.All(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '-');
+    }
+
+    private static IEnumerable<string> SplitManagedMcpArguments(string? text)
+    {
+        return (text ?? string.Empty)
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(line => !string.IsNullOrWhiteSpace(line));
+    }
+
+    private static string EncodeTomlString(string value)
+    {
+        return "\"" + (value ?? string.Empty)
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"") + "\"";
+    }
+
+    private static string BuildSkillScopeLabel(string path, string workingDirectory, string homeSkillsDirectory, bool isSystem)
+    {
+        if (isSystem)
+        {
+            return "System";
+        }
+
+        if (path.StartsWith(homeSkillsDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Global";
+        }
+
+        if (path.StartsWith(workingDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Workspace";
+        }
+
+        return "External";
     }
 
     private static string BuildThreadConfigKey(CodexExtensionSettings settings, string workingDirectory)
