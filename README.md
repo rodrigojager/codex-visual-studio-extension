@@ -18,16 +18,6 @@ Extensão VSIX para Visual Studio 2026 com painel lateral para integração com 
 - Suporte a `--image` ao chamar o Codex CLI
 - Busca de arquivos da solução enquanto o usuário digita `@arquivo` no final do prompt
 
-## Releases no GitHub
-
-O repositório está preparado para publicar releases com GitHub Actions.
-
-1. Crie uma tag no formato `vX.Y.Z`, por exemplo `v1.0.0`.
-2. Faça push da tag para o GitHub.
-3. O workflow `.github/workflows/release.yml` atualiza a versão da extensão, compila a VSIX em `Release` e publica o arquivo no GitHub Releases.
-
-Também é possível disparar o workflow manualmente em `Actions > Release`, informando a versão no formato `X.Y.Z`.
-
 ## Observações
 
 - O empacotamento da VSIX no CI usa `MSBuild` completo e habilita a geração do pacote com a propriedade `BuildVsixPackage=true`.
