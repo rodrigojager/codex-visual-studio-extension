@@ -1,0 +1,304 @@
+<UserControl x:Class="CodexVsix.CodexSettingsToolWindowControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:themes="clr-namespace:Microsoft.VisualStudio.PlatformUI;assembly=Microsoft.VisualStudio.Shell.15.0"
+             mc:Ignorable="d"
+             Loaded="OnLoaded">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="WindowBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBackgroundColorKey}}" />
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBorderColorKey}}" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowTextColorKey}}" />
+        <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.SystemGrayTextColorKey}}" />
+        <SolidColorBrush x:Key="ChipBrush" Color="#14FFFFFF" />
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#22FFFFFF" />
+
+        <Style x:Key="CardButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="{StaticResource ChipBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PanelTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="{StaticResource WindowBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,8" />
+        </Style>
+
+        <Style x:Key="PanelComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="{StaticResource WindowBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,4" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource WindowBrush}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="20">
+                <TextBlock x:Name="SettingsPlaceholderText"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           FontSize="14"
+                           Text="{Binding Localization.SettingsTitle}"
+                           Visibility="Collapsed" />
+
+                <StackPanel x:Name="AccountSectionPanel" Visibility="Collapsed">
+                    <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontSize="28" FontWeight="SemiBold" Text="{Binding Localization.AccountTitle}" />
+                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.AccountSubtitle}" TextWrapping="Wrap" />
+                    <Border Margin="0,18,0,0" Padding="14" Background="{StaticResource ChipBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="14">
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="{Binding Localization.SignedInAsLabel}" />
+                            <TextBlock Margin="0,4,0,0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="16" FontWeight="SemiBold" Text="{Binding CurrentAccountLabel}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                    <WrapPanel Margin="0,16,0,0">
+                        <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.SetupRefreshButton}" Command="{Binding RefreshCodexStatusCommand}" />
+                        <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.SetupLoginButton}" Command="{Binding RunCodexLoginCommand}" />
+                        <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.LogOutAndLogInButton}" Command="{Binding LogOutAndLoginCommand}" />
+                    </WrapPanel>
+                </StackPanel>
+
+                <StackPanel x:Name="CodexSectionPanel" Visibility="Collapsed">
+                    <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontSize="28" FontWeight="SemiBold" Text="{Binding Localization.CodexSettingsNav}" />
+                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.SetupReadySummary}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,18,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.ExecutableLabel}" />
+                    <TextBox Style="{StaticResource PanelTextBoxStyle}" Text="{Binding Settings.CodexExecutablePath, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.CodexConfigLabel}" />
+                    <DockPanel LastChildFill="False">
+                        <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" Text="{Binding CodexConfigPath}" TextTrimming="CharacterEllipsis" />
+                        <Button DockPanel.Dock="Right" Margin="10,0,0,0" Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.OpenConfigButton}" Command="{Binding OpenCodexConfigCommand}" />
+                    </DockPanel>
+                    <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.VerbosityLabel}" />
+                    <ComboBox Style="{StaticResource PanelComboBoxStyle}" ItemsSource="{Binding VerbosityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SelectedVerbosity, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.ApprovalPolicyLabel}" />
+                    <ComboBox Style="{StaticResource PanelComboBoxStyle}" ItemsSource="{Binding ApprovalPolicyOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SelectedApprovalPolicy, UpdateSourceTrigger=PropertyChanged}" />
+                    <WrapPanel Margin="0,16,0,0">
+                        <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.ManagedMcpApplyButton}" Command="{Binding SaveSettingsCommand}" />
+                        <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.ReadDocsLabel}" Command="{Binding OpenCodexDocsCommand}" />
+                    </WrapPanel>
+                </StackPanel>
+
+                <StackPanel x:Name="McpSectionPanel" Visibility="Collapsed">
+                    <DockPanel LastChildFill="False">
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontSize="28" FontWeight="SemiBold" Text="{Binding Localization.McpServersTitle}" />
+                            <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.ManagedMcpDescription}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <WrapPanel DockPanel.Dock="Right">
+                            <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.ManagedMcpAddStdioButton}" Command="{Binding AddManagedMcpCommand}" CommandParameter="stdio" />
+                            <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.ManagedMcpAddUrlButton}" Command="{Binding AddManagedMcpCommand}" CommandParameter="url" />
+                            <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.ManagedMcpApplyButton}" Command="{Binding SaveSettingsCommand}" />
+                        </WrapPanel>
+                    </DockPanel>
+
+                    <TextBlock Margin="0,20,0,8" Foreground="{StaticResource TextMutedBrush}" FontWeight="SemiBold" Text="{Binding Localization.ManagedMcpTitle}" />
+                    <TextBlock Margin="0,0,0,8" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.NoManagedMcpServers}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasManagedMcpServers}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ItemsControl ItemsSource="{Binding ManagedMcpServers}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="12" Background="{StaticResource ChipBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                    <StackPanel>
+                                        <DockPanel LastChildFill="False">
+                                            <CheckBox VerticalAlignment="Center"
+                                                      Foreground="{StaticResource TextPrimaryBrush}"
+                                                      Content="{Binding DataContext.Localization.EnabledLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                      IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" />
+                                            <Button DockPanel.Dock="Right"
+                                                    Margin="8,0,0,0"
+                                                    Style="{StaticResource CardButtonStyle}"
+                                                    Content="{Binding DataContext.Localization.ManagedMcpRemoveButton, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Command="{Binding DataContext.RemoveManagedMcpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}" />
+                                        </DockPanel>
+                                        <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding DataContext.Localization.ManagedMcpNameLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <TextBox Style="{StaticResource PanelTextBoxStyle}" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding DataContext.Localization.ManagedMcpTransportLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <ComboBox Style="{StaticResource PanelComboBoxStyle}" ItemsSource="{Binding DataContext.McpTransportOptions, RelativeSource={RelativeSource AncestorType=UserControl}}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding TransportType, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding DataContext.Localization.ManagedMcpCommandLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <TextBox Style="{StaticResource PanelTextBoxStyle}" Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding DataContext.Localization.ManagedMcpArgsLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <TextBox Style="{StaticResource PanelTextBoxStyle}" MinHeight="56" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding DataContext.Localization.ManagedMcpUrlLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <TextBox Style="{StaticResource PanelTextBoxStyle}" Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Margin="0,20,0,8" Foreground="{StaticResource TextMutedBrush}" FontWeight="SemiBold" Text="{Binding Localization.McpServersTitle}" />
+                    <TextBlock Margin="0,0,0,8" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.NoManagedMcpServers}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasDetectedMcpServers}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ItemsControl ItemsSource="{Binding McpServers}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,8" Padding="12" Background="{StaticResource ChipBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                    <StackPanel>
+                                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" Text="{Binding Name}" />
+                                        <TextBlock Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="{Binding AuthStatus}" />
+                                        <TextBlock Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="{Binding ToolsLabel}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <StackPanel x:Name="SkillsSectionPanel" Visibility="Collapsed">
+                    <DockPanel LastChildFill="False">
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontSize="28" FontWeight="SemiBold" Text="{Binding Localization.SkillsTitle}" />
+                            <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.SkillsDescription}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <WrapPanel DockPanel.Dock="Right">
+                            <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.RefreshStatusButton}" Command="{Binding RefreshIntegrationsCommand}" />
+                            <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.OpenSkillsFolderButton}" Command="{Binding OpenCodexSkillsFolderCommand}" />
+                        </WrapPanel>
+                    </DockPanel>
+
+                    <TextBlock Margin="0,20,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.SearchSkillsPlaceholder}" />
+                    <TextBox Style="{StaticResource PanelTextBoxStyle}" Text="{Binding SkillSearchText, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <TextBlock Margin="0,20,0,8" Foreground="{StaticResource TextMutedBrush}" FontWeight="SemiBold" Text="{Binding Localization.InstalledSkillsTitle}" />
+                    <TextBlock Margin="0,0,0,8" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.NoSkillsDetected}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSkills}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ItemsControl ItemsSource="{Binding VisibleSkills}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,8" Padding="12" Background="{StaticResource ChipBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" Text="{Binding DisplayTitle}" />
+                                            <TextBlock Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="{Binding Summary}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" Orientation="Horizontal" VerticalAlignment="Top">
+                                            <CheckBox Margin="0,0,10,0"
+                                                      VerticalAlignment="Center"
+                                                      Foreground="{StaticResource TextPrimaryBrush}"
+                                                      Content="{Binding DataContext.Localization.EnabledLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                      IsChecked="{Binding IsEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                                      Command="{Binding DataContext.ToggleSkillEnabledCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                      CommandParameter="{Binding}" />
+                                            <Button Style="{StaticResource CardButtonStyle}"
+                                                    Content="{Binding DataContext.Localization.SkillOpenButton, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    Command="{Binding DataContext.OpenPathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding Path}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Margin="0,20,0,8" Foreground="{StaticResource TextMutedBrush}" FontWeight="SemiBold" Text="{Binding Localization.RecommendedSkillsTitle}" />
+                    <TextBlock Margin="0,0,0,8" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.NoRecommendedSkills}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasRemoteSkills}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ItemsControl ItemsSource="{Binding VisibleRemoteSkills}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,8" Padding="12" Background="{StaticResource ChipBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" Text="{Binding Name}" />
+                                            <TextBlock Margin="0,3,0,0" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Text="{Binding Description}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1"
+                                                Margin="12,0,0,0"
+                                                Style="{StaticResource CardButtonStyle}"
+                                                Content="{Binding DataContext.Localization.InstallSkillButton, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Command="{Binding DataContext.InstallRemoteSkillCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Margin="0,20,0,0" Padding="12" Background="{StaticResource ChipBrush}" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="14">
+                        <StackPanel>
+                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" Text="{Binding Localization.CreateSkillButton}" />
+                            <TextBlock Margin="0,6,0,0" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.SkillsLearnMore}" TextWrapping="Wrap" />
+                            <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.SkillNameLabel}" />
+                            <TextBox Style="{StaticResource PanelTextBoxStyle}" Text="{Binding NewSkillName, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Margin="0,10,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.SkillDescriptionLabel}" />
+                            <TextBox Style="{StaticResource PanelTextBoxStyle}" MinHeight="60" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Text="{Binding NewSkillDescription, UpdateSourceTrigger=PropertyChanged}" />
+                            <WrapPanel Margin="0,12,0,0">
+                                <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.CreateSkillButton}" Command="{Binding CreateSkillCommand}" />
+                                <Button Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.OpenSkillsFolderButton}" Command="{Binding OpenCodexSkillsFolderCommand}" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

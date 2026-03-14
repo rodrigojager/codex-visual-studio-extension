@@ -18,6 +18,8 @@ public sealed class CodexProcessService : IDisposable
     private static readonly Regex MentionRegex = new(@"(?<!\S)@(?<value>\S+)", RegexOptions.Compiled);
     private static readonly Regex SkillRegex = new(@"(?<!\S)\$(?<value>[A-Za-z0-9][A-Za-z0-9._-]*)", RegexOptions.Compiled);
     private const string ExtensionContextPrefix = "Contexto da extensão: o diretório de trabalho atual do projeto aberto é \"";
+    private const string IdeContextPrefix = "Contexto atual da IDE:";
+    private const string PreferredMcpPrefix = "Atalhos MCP preferidos para este pedido:";
 
     private readonly SemaphoreSlim _executionGate = new(1, 1);
     private readonly object _syncRoot = new();
@@ -55,6 +57,7 @@ public sealed class CodexProcessService : IDisposable
         string prompt,
         CodexExtensionSettings settings,
         IEnumerable<string> imagePaths,
+        string ideContextSummary,
         Action<string> onOutput,
         Action<string> onError,
         Action<ChatMessage>? onEventMessage,
@@ -80,9 +83,14 @@ public sealed class CodexProcessService : IDisposable
             {
                 try
                 {
-                    var turnResult = await SendRequestAsync(
-                        "turn/start",
-                        BuildTurnStartParams(_threadId!, prompt, settings, workingDirectory, imagePaths),
+                    var turnResult = await StartTurnWithFallbackAsync(
+                        turnState,
+                        _threadId!,
+                        prompt,
+                        settings,
+                        workingDirectory,
+                        imagePaths,
+                        ideContextSummary,
                         cancellationToken).ConfigureAwait(false);
 
                     turnState.TurnId = turnResult?["turn"]?["id"]?.Value<string>();
@@ -389,6 +397,11 @@ public sealed class CodexProcessService : IDisposable
                 summaries.Add(new CodexSkillSummary
                 {
                     Name = name!,
+                    DisplayName = skill["interface"]?["displayName"]?.Value<string>() ?? name!,
+                    Description = skill["description"]?.Value<string>() ?? string.Empty,
+                    ShortDescription = skill["interface"]?["shortDescription"]?.Value<string>()
+                        ?? skill["shortDescription"]?.Value<string>()
+                        ?? string.Empty,
                     Path = path!,
                     IsEnabled = skill["enabled"]?.Value<bool>() ?? true,
                     IsSystem = isSystem,
@@ -401,6 +414,102 @@ public sealed class CodexProcessService : IDisposable
             .OrderBy(skill => skill.IsSystem)
             .ThenBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<CodexRemoteSkillSummary>> ListRemoteSkillsAsync(CodexExtensionSettings settings, CancellationToken cancellationToken)
+    {
+        var workingDirectory = ResolveWorkingDirectory(settings.WorkingDirectory);
+        await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
+
+        var response = await SendRequestAsync(
+            "skills/remote/list",
+            new
+            {
+                hazelnutScope = "all-shared",
+                productSurface = "codex",
+                enabled = true
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var items = response?["data"] as JArray;
+        var summaries = new List<CodexRemoteSkillSummary>();
+        if (items is null)
+        {
+            return summaries;
+        }
+
+        foreach (var item in items)
+        {
+            var id = item?["id"]?.Value<string>();
+            var name = item?["name"]?.Value<string>();
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            summaries.Add(new CodexRemoteSkillSummary
+            {
+                Id = id!,
+                Name = name!,
+                Description = item?["description"]?.Value<string>() ?? string.Empty
+            });
+        }
+
+        return summaries
+            .OrderBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<string?> InstallRemoteSkillAsync(CodexExtensionSettings settings, string remoteSkillId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(remoteSkillId))
+        {
+            return null;
+        }
+
+        var workingDirectory = ResolveWorkingDirectory(settings.WorkingDirectory);
+        await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
+
+        var response = await SendRequestAsync(
+            "skills/remote/export",
+            new
+            {
+                hazelnutId = remoteSkillId
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return response?["path"]?.Value<string>();
+    }
+
+    public async Task<bool> SetSkillEnabledAsync(CodexExtensionSettings settings, string path, bool enabled, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return enabled;
+        }
+
+        var workingDirectory = ResolveWorkingDirectory(settings.WorkingDirectory);
+        await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
+
+        var response = await SendRequestAsync(
+            "skills/config/write",
+            new
+            {
+                path,
+                enabled
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return response?["effectiveEnabled"]?.Value<bool>() ?? enabled;
+    }
+
+    public async Task<CodexRateLimitSummary> GetAccountRateLimitsAsync(CodexExtensionSettings settings, CancellationToken cancellationToken)
+    {
+        var workingDirectory = ResolveWorkingDirectory(settings.WorkingDirectory);
+        await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
+
+        var response = await SendRequestAsync("account/rateLimits/read", new { }, cancellationToken).ConfigureAwait(false);
+        return BuildRateLimitSummary(response?["rateLimits"] ?? response?["rate_limits"]);
     }
 
     public void InvalidateSkillsCache()
@@ -1060,13 +1169,38 @@ public sealed class CodexProcessService : IDisposable
             approvalPolicy = NormalizeApprovalPolicy(settings.ApprovalPolicy),
             sandbox = NormalizeSandboxMode(settings.SandboxMode),
             model = string.IsNullOrWhiteSpace(settings.DefaultModel) ? null : settings.DefaultModel,
+            serviceTier = NormalizeServiceTier(settings.ServiceTier),
             personality = "pragmatic",
             persistExtendedHistory = true
         };
     }
 
-    private object BuildTurnStartParams(string threadId, string prompt, CodexExtensionSettings settings, string workingDirectory, IEnumerable<string> imagePaths)
+    private object BuildTurnStartParams(string threadId, string prompt, CodexExtensionSettings settings, string workingDirectory, IEnumerable<string> imagePaths, string ideContextSummary)
     {
+        return BuildTurnStartParams(threadId, prompt, settings, workingDirectory, imagePaths, ideContextSummary, includeExecutionOverrides: true, includeCollaborationMode: true);
+    }
+
+    private object BuildTurnStartParams(
+        string threadId,
+        string prompt,
+        CodexExtensionSettings settings,
+        string workingDirectory,
+        IEnumerable<string> imagePaths,
+        string ideContextSummary,
+        bool includeExecutionOverrides,
+        bool includeCollaborationMode)
+    {
+        var input = BuildUserInput(prompt, settings, workingDirectory, imagePaths, ideContextSummary);
+        if (!includeExecutionOverrides)
+        {
+            return new
+            {
+                threadId,
+                cwd = workingDirectory,
+                input
+            };
+        }
+
         return new
         {
             threadId,
@@ -1075,9 +1209,66 @@ public sealed class CodexProcessService : IDisposable
             effort = string.IsNullOrWhiteSpace(settings.ReasoningEffort) ? null : settings.ReasoningEffort,
             approvalPolicy = NormalizeApprovalPolicy(settings.ApprovalPolicy),
             sandboxPolicy = BuildSandboxPolicy(settings.SandboxMode),
-            collaborationMode = BuildCollaborationMode(settings),
-            input = BuildUserInput(prompt, workingDirectory, imagePaths)
+            serviceTier = NormalizeServiceTier(settings.ServiceTier),
+            collaborationMode = includeCollaborationMode ? BuildCollaborationMode(settings) : null,
+            input
         };
+    }
+
+    private async Task<JToken?> StartTurnWithFallbackAsync(
+        ActiveTurnState turnState,
+        string threadId,
+        string prompt,
+        CodexExtensionSettings settings,
+        string workingDirectory,
+        IEnumerable<string> imagePaths,
+        string ideContextSummary,
+        CancellationToken cancellationToken)
+    {
+        var attempts = new List<(string Label, bool IncludeExecutionOverrides, bool IncludeCollaborationMode)>
+        {
+            ("full", true, true)
+        };
+
+        if (settings.PlanModeEnabled)
+        {
+            attempts.Add(("no-plan", true, false));
+        }
+
+        attempts.Add(("minimal", false, false));
+
+        Exception? lastError = null;
+        for (var index = 0; index < attempts.Count; index++)
+        {
+            var attempt = attempts[index];
+            try
+            {
+                var requestParams = BuildTurnStartParams(
+                    threadId,
+                    prompt,
+                    settings,
+                    workingDirectory,
+                    imagePaths,
+                    ideContextSummary,
+                    attempt.IncludeExecutionOverrides,
+                    attempt.IncludeCollaborationMode);
+                return await SendRequestAsync("turn/start", requestParams, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lastError = ex;
+                if (index < attempts.Count - 1)
+                {
+                    turnState.OnError("[turn/start fallback:" + attempt.Label + "] " + ex.Message + Environment.NewLine);
+                    RestartServer(clearConfig: false);
+                    await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
+                    await EnsureThreadReadyAsync(settings, workingDirectory, settings.CurrentThreadId, cancellationToken).ConfigureAwait(false);
+                    threadId = _threadId ?? settings.CurrentThreadId ?? threadId;
+                }
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException("Failed to start turn.");
     }
 
     private static object BuildThreadResumeParams(string threadId, CodexExtensionSettings settings, string workingDirectory)
@@ -1089,6 +1280,7 @@ public sealed class CodexProcessService : IDisposable
             approvalPolicy = NormalizeApprovalPolicy(settings.ApprovalPolicy),
             sandbox = NormalizeSandboxMode(settings.SandboxMode),
             model = string.IsNullOrWhiteSpace(settings.DefaultModel) ? null : settings.DefaultModel,
+            serviceTier = NormalizeServiceTier(settings.ServiceTier),
             personality = "pragmatic",
             persistExtendedHistory = true
         };
@@ -1138,21 +1330,41 @@ public sealed class CodexProcessService : IDisposable
         }
     }
 
-    private object[] BuildUserInput(string prompt, string workingDirectory, IEnumerable<string> imagePaths)
+    private object[] BuildUserInput(string prompt, CodexExtensionSettings settings, string workingDirectory, IEnumerable<string> imagePaths, string ideContextSummary)
     {
-        var inputs = new List<object>
+        var inputs = new List<object>();
+
+        var baseContext = "Contexto da extensão: o diretório de trabalho atual do projeto aberto é \"" + Path.GetFullPath(workingDirectory) + "\".";
+        inputs.Add(new
         {
-            new
+            type = "text",
+            text = baseContext
+        });
+
+        if (!string.IsNullOrWhiteSpace(ideContextSummary))
+        {
+            inputs.Add(new
             {
                 type = "text",
-                text = "Contexto da extensão: o diretório de trabalho atual do projeto aberto é \"" + Path.GetFullPath(workingDirectory) + "\"."
-            },
-            new
+                text = ideContextSummary
+            });
+        }
+
+        var preferredMcpContext = BuildPreferredMcpContext(settings);
+        if (!string.IsNullOrWhiteSpace(preferredMcpContext))
+        {
+            inputs.Add(new
             {
                 type = "text",
-                text = prompt
-            }
-        };
+                text = preferredMcpContext
+            });
+        }
+
+        inputs.Add(new
+        {
+            type = "text",
+            text = prompt
+        });
 
         foreach (var mention in ExtractMentionInputs(prompt, workingDirectory))
         {
@@ -1174,6 +1386,122 @@ public sealed class CodexProcessService : IDisposable
         }
 
         return inputs.ToArray();
+    }
+
+    private static string BuildPreferredMcpContext(CodexExtensionSettings settings)
+    {
+        var preferredServers = settings.PreferredMcpServers?
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return preferredServers is { Length: > 0 }
+            ? "Atalhos MCP preferidos para este pedido: " + string.Join(", ", preferredServers) + "."
+            : string.Empty;
+    }
+
+    private static CodexRateLimitSummary BuildRateLimitSummary(JToken? snapshot)
+    {
+        if (snapshot is null)
+        {
+            return new CodexRateLimitSummary();
+        }
+
+        var primary = snapshot["primary"];
+        var secondary = snapshot["secondary"];
+        var credits = snapshot["credits"];
+        var planType = snapshot["planType"]?.Value<string>() ?? snapshot["plan_type"]?.Value<string>() ?? string.Empty;
+
+        return new CodexRateLimitSummary
+        {
+            PlanLabel = string.IsNullOrWhiteSpace(planType) ? string.Empty : planType,
+            PrimaryWindow = BuildRateLimitWindowSummary(primary),
+            SecondaryWindow = BuildRateLimitWindowSummary(secondary),
+            CreditsLabel = BuildCreditsLabel(credits)
+        };
+    }
+
+    private static CodexRateLimitWindowSummary BuildRateLimitWindowSummary(JToken? window)
+    {
+        if (window is null)
+        {
+            return new CodexRateLimitWindowSummary();
+        }
+
+        var usedPercent = window["usedPercent"]?.Value<double?>()
+            ?? window["used_percent"]?.Value<double?>();
+        var remainingPercent = window["remainingPercent"]?.Value<double?>()
+            ?? window["remaining_percent"]?.Value<double?>();
+        var durationMinutes = window["windowDurationMins"]?.Value<int?>()
+            ?? window["window_duration_mins"]?.Value<int?>();
+        var resetsAtSeconds = window["resetsAt"]?.Value<long?>()
+            ?? window["resets_at"]?.Value<long?>();
+
+        var effectiveRemainingPercent = remainingPercent
+            ?? (usedPercent.HasValue ? Math.Max(0d, 100d - usedPercent.Value) : 0d);
+        var usageText = Math.Round(effectiveRemainingPercent).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "%";
+        var title = string.Empty;
+        var detailParts = new List<string>();
+        if (durationMinutes.HasValue && durationMinutes.Value > 0)
+        {
+            title = BuildRateLimitWindowDurationLabel(durationMinutes.Value);
+        }
+
+        detailParts.Add(usageText);
+
+        if (resetsAtSeconds.HasValue && resetsAtSeconds.Value > 0)
+        {
+            var resetAt = DateTimeOffset.FromUnixTimeSeconds(resetsAtSeconds.Value).ToLocalTime();
+            detailParts.Add(resetAt.ToString("g"));
+        }
+
+        return new CodexRateLimitWindowSummary
+        {
+            Title = title,
+            Detail = string.Join("   ", detailParts)
+        };
+    }
+
+    private static string BuildRateLimitWindowDurationLabel(int durationMinutes)
+    {
+        if (durationMinutes == 10080)
+        {
+            return IsPortugueseUiCulture() ? "Semanal" : "Weekly";
+        }
+
+        if (durationMinutes >= 60 && durationMinutes % 60 == 0)
+        {
+            return (durationMinutes / 60) + "h";
+        }
+
+        return durationMinutes + "m";
+    }
+
+    private static bool IsPortugueseUiCulture()
+    {
+        return string.Equals(System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName, "pt", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildCreditsLabel(JToken? credits)
+    {
+        if (credits is null)
+        {
+            return string.Empty;
+        }
+
+        var available = credits["available"]?.Value<decimal?>()
+            ?? credits["available_credits"]?.Value<decimal?>();
+        var used = credits["used"]?.Value<decimal?>()
+            ?? credits["used_credits"]?.Value<decimal?>();
+
+        if (available.HasValue && used.HasValue)
+        {
+            return used.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                + " / "
+                + available.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        return available?.ToString() ?? used?.ToString() ?? string.Empty;
     }
 
     private IEnumerable<object> ExtractMentionInputs(string prompt, string workingDirectory)
@@ -1434,7 +1762,10 @@ public sealed class CodexProcessService : IDisposable
             {
                 case "text":
                     var text = item?["text"]?.Value<string>();
-                    if (!string.IsNullOrWhiteSpace(text) && !text.TrimStart().StartsWith(ExtensionContextPrefix, StringComparison.Ordinal))
+                    if (!string.IsNullOrWhiteSpace(text)
+                        && !text.TrimStart().StartsWith(ExtensionContextPrefix, StringComparison.Ordinal)
+                        && !text.TrimStart().StartsWith(IdeContextPrefix, StringComparison.Ordinal)
+                        && !text.TrimStart().StartsWith(PreferredMcpPrefix, StringComparison.Ordinal))
                     {
                         segments.Add(text.Trim());
                     }
@@ -2245,6 +2576,7 @@ public sealed class CodexProcessService : IDisposable
         {
             workingDirectory,
             settings.DefaultModel ?? string.Empty,
+            NormalizeServiceTier(settings.ServiceTier) ?? string.Empty,
             NormalizeApprovalPolicy(settings.ApprovalPolicy),
             NormalizeSandboxMode(settings.SandboxMode)
         });
@@ -2258,6 +2590,17 @@ public sealed class CodexProcessService : IDisposable
     private static string NormalizeSandboxMode(string sandboxMode)
     {
         return string.IsNullOrWhiteSpace(sandboxMode) ? "danger-full-access" : sandboxMode;
+    }
+
+    private static string? NormalizeServiceTier(string? serviceTier)
+    {
+        var normalized = (serviceTier ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "fast" => "fast",
+            "flex" => "flex",
+            _ => null
+        };
     }
 
     private static ProcessStartInfo BuildStartInfo(string executablePath, string arguments, string workingDirectory)

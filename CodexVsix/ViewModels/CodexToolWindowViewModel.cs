@@ -24,8 +24,15 @@ namespace CodexVsix.ViewModels;
 public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposable
 {
     private const double DefaultContextTokenBudget = 128000d;
+    private const string SettingsSectionAccount = "account";
+    private const string SettingsSectionCodexMenu = "codex-menu";
+    private const string SettingsSectionCodex = "codex";
+    private const string SettingsSectionIde = "ide";
+    private const string SettingsSectionMcp = "mcp";
+    private const string SettingsSectionSkills = "skills";
+    private const string SettingsSectionLanguage = "language";
 
-    private readonly LocalizationService _localization = new();
+    private LocalizationService _localization;
     private readonly ExtensionSettingsStore _settingsStore = new();
     private readonly CodexProcessService _codexProcessService = new();
     private readonly CodexEnvironmentService _codexEnvironmentService = new();
@@ -57,12 +64,18 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private string _renameThreadName = string.Empty;
     private string _newSkillName = string.Empty;
     private string _newSkillDescription = string.Empty;
+    private string _skillSearchText = string.Empty;
+    private string _historySearchText = string.Empty;
+    private string _languageSearchText = string.Empty;
+    private string _selectedSettingsSection = string.Empty;
+    private CodexRateLimitSummary _rateLimitSummary = new();
     private CodexEnvironmentStatus _codexEnvironmentStatus = new() { Stage = CodexSetupStage.Checking };
 
     public CodexToolWindowViewModel()
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         Settings = _settingsStore.Load();
+        _localization = new LocalizationService(Settings.LanguageOverride);
 
         if (string.IsNullOrWhiteSpace(Settings.DefaultModel)) Settings.DefaultModel = "gpt-5.4";
         if (string.IsNullOrWhiteSpace(Settings.ReasoningEffort)) Settings.ReasoningEffort = "high";
@@ -85,6 +98,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         UseSolutionDirectoryCommand = new DelegateCommand(UseSolutionDirectory);
         OpenCodexConfigCommand = new DelegateCommand(OpenCodexConfig);
         OpenCodexSkillsFolderCommand = new DelegateCommand(OpenCodexSkillsFolder);
+        OpenCodexDocsCommand = new DelegateCommand(OpenCodexDocs);
+        OpenKeyboardShortcutsCommand = new DelegateCommand(OpenKeyboardShortcuts);
         OpenPathCommand = new DelegateCommand(OpenPath);
         RefreshCodexStatusCommand = new DelegateCommand(RefreshCodexStatus);
         RunCodexLoginCommand = new DelegateCommand(RunCodexLogin, _ => CanRunCodexLogin);
@@ -103,8 +118,22 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ReuseHistoryPromptCommand = new DelegateCommand(ReuseHistoryPrompt, () => SelectedHistoryPrompt is not null);
         NewThreadCommand = new DelegateCommand(StartNewThread, () => !IsBusy);
         RenameThreadCommand = new DelegateCommand(RenameSelectedThread, () => !IsBusy && SelectedThread is not null && !string.IsNullOrWhiteSpace(RenameThreadName));
+        OpenHistoryPanelCommand = new DelegateCommand(OpenHistoryPanel);
         ToggleHistoryPanelCommand = new DelegateCommand(ToggleHistoryPanel);
         ToggleSettingsPanelCommand = new DelegateCommand(ToggleSettingsPanel);
+        CloseSettingsDetailCommand = new DelegateCommand(CloseSettingsDetail);
+        CloseSidebarCommand = new DelegateCommand(CloseSidebar);
+        SelectSettingsSectionCommand = new DelegateCommand(SelectSettingsSection);
+        TogglePreferredMcpCommand = new DelegateCommand(TogglePreferredMcp);
+        SelectReasoningEffortCommand = new DelegateCommand(SelectReasoningEffort);
+        SelectVerbosityCommand = new DelegateCommand(SelectVerbosity);
+        SelectApprovalPolicyCommand = new DelegateCommand(SelectApprovalPolicy);
+        SelectSandboxModeCommand = new DelegateCommand(SelectSandboxMode);
+        ToggleSkillEnabledCommand = new DelegateCommand(ToggleSkillEnabled);
+        InstallRemoteSkillCommand = new DelegateCommand(InstallRemoteSkill);
+        SelectLanguageCommand = new DelegateCommand(SelectLanguage);
+        LogOutCommand = new DelegateCommand(LogOut, _ => CanLogOutAndLogIn);
+        LogOutAndLoginCommand = new DelegateCommand(LogOutAndLogin, _ => CanLogOutAndLogIn);
         ResolveApprovalCommand = new DelegateCommand(ResolveApproval);
         ResolveUserInputCommand = new DelegateCommand(ResolveUserInput);
 
@@ -127,6 +156,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
         ManagedMcpServers.CollectionChanged += HandleManagedMcpServersChanged;
         Skills.CollectionChanged += HandleSkillsChanged;
+        McpServers.CollectionChanged += HandleMcpServersChanged;
+        Threads.CollectionChanged += HandleThreadsChanged;
+        Messages.CollectionChanged += HandleMessagesChanged;
 
         RefreshMentions();
         UpdateContextEstimate();
@@ -145,6 +177,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _cts?.Dispose();
         ManagedMcpServers.CollectionChanged -= HandleManagedMcpServersChanged;
         Skills.CollectionChanged -= HandleSkillsChanged;
+        McpServers.CollectionChanged -= HandleMcpServersChanged;
+        Threads.CollectionChanged -= HandleThreadsChanged;
+        Messages.CollectionChanged -= HandleMessagesChanged;
         _codexProcessService.ThreadCatalogChanged -= HandleThreadCatalogChanged;
         _codexProcessService.Dispose();
     }
@@ -159,17 +194,27 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public ObservableCollection<CodexMcpServerSummary> McpServers { get; } = new();
     public ObservableCollection<CodexManagedMcpServer> ManagedMcpServers { get; } = new();
     public ObservableCollection<CodexSkillSummary> Skills { get; } = new();
+    public ObservableCollection<CodexRemoteSkillSummary> RemoteSkills { get; } = new();
     public ObservableCollection<CodexSkillSummary> DetectedPromptSkills { get; } = new();
     public ObservableCollection<ChatMessage> Messages { get; } = new();
     public ObservableCollection<SelectionOption> ModelOptions { get; } = new();
 
     public SelectionOption[] ReasoningOptions => _localization.CreateReasoningOptions();
 
+    public SelectionOption[] ReasoningMenuOptions => new[]
+    {
+        new SelectionOption(_localization.ReasoningEffortLabel, "__label")
+    }.Concat(ReasoningOptions).ToArray();
+
     public SelectionOption[] VerbosityOptions => _localization.CreateVerbosityOptions();
+
+    public SelectionOption[] ServiceTierOptions => _localization.CreateServiceTierOptions();
 
     public SelectionOption[] ApprovalPolicyOptions => _localization.CreateApprovalPolicyOptions();
 
     public SelectionOption[] SandboxModeOptions => _localization.CreateSandboxModeOptions();
+
+    public SelectionOption[] LanguageOptions => _localization.CreateLanguageOptions();
 
     public SelectionOption[] McpTransportOptions => new[]
     {
@@ -184,6 +229,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public DelegateCommand UseSolutionDirectoryCommand { get; }
     public DelegateCommand OpenCodexConfigCommand { get; }
     public DelegateCommand OpenCodexSkillsFolderCommand { get; }
+    public DelegateCommand OpenCodexDocsCommand { get; }
+    public DelegateCommand OpenKeyboardShortcutsCommand { get; }
     public DelegateCommand OpenPathCommand { get; }
     public DelegateCommand RefreshCodexStatusCommand { get; }
     public DelegateCommand RunCodexLoginCommand { get; }
@@ -202,8 +249,22 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public DelegateCommand ReuseHistoryPromptCommand { get; }
     public DelegateCommand NewThreadCommand { get; }
     public DelegateCommand RenameThreadCommand { get; }
+    public DelegateCommand OpenHistoryPanelCommand { get; }
     public DelegateCommand ToggleHistoryPanelCommand { get; }
     public DelegateCommand ToggleSettingsPanelCommand { get; }
+    public DelegateCommand CloseSettingsDetailCommand { get; }
+    public DelegateCommand CloseSidebarCommand { get; }
+    public DelegateCommand SelectSettingsSectionCommand { get; }
+    public DelegateCommand TogglePreferredMcpCommand { get; }
+    public DelegateCommand SelectReasoningEffortCommand { get; }
+    public DelegateCommand SelectVerbosityCommand { get; }
+    public DelegateCommand SelectApprovalPolicyCommand { get; }
+    public DelegateCommand SelectSandboxModeCommand { get; }
+    public DelegateCommand ToggleSkillEnabledCommand { get; }
+    public DelegateCommand InstallRemoteSkillCommand { get; }
+    public DelegateCommand SelectLanguageCommand { get; }
+    public DelegateCommand LogOutCommand { get; }
+    public DelegateCommand LogOutAndLoginCommand { get; }
     public DelegateCommand ResolveApprovalCommand { get; }
     public DelegateCommand ResolveUserInputCommand { get; }
 
@@ -246,30 +307,40 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public bool ShowHistoryPanel
     {
         get => _showHistoryPanel;
-        private set
+        set
         {
             _showHistoryPanel = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsSidebarExpanded));
             OnPropertyChanged(nameof(SidebarWidth));
+            OnPropertyChanged(nameof(IsHistoryViewSelected));
+            OnPropertyChanged(nameof(IsSettingsViewSelected));
+            OnPropertyChanged(nameof(ShowRecentTasksPreview));
         }
     }
 
     public bool ShowSettingsPanel
     {
         get => _showSettingsPanel;
-        private set
+        set
         {
             _showSettingsPanel = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsSidebarExpanded));
             OnPropertyChanged(nameof(SidebarWidth));
+            OnPropertyChanged(nameof(IsHistoryViewSelected));
+            OnPropertyChanged(nameof(IsSettingsViewSelected));
+            OnPropertyChanged(nameof(ShowRecentTasksPreview));
         }
     }
 
     public bool IsSidebarExpanded => ShowHistoryPanel || ShowSettingsPanel;
 
     public double SidebarWidth => IsSidebarExpanded ? 292d : 0d;
+
+    public bool IsHistoryViewSelected => ShowHistoryPanel;
+
+    public bool IsSettingsViewSelected => ShowSettingsPanel;
 
     public string CurrentMentionQuery
     {
@@ -331,8 +402,12 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             OnPropertyChanged(nameof(NeedsCodexInstall));
             OnPropertyChanged(nameof(NeedsCodexLogin));
             OnPropertyChanged(nameof(CanRunCodexLogin));
+            OnPropertyChanged(nameof(CurrentAccountLabel));
+            OnPropertyChanged(nameof(CanLogOutAndLogIn));
             SendCommand.RaiseCanExecuteChanged();
             RunCodexLoginCommand.RaiseCanExecuteChanged();
+            LogOutCommand.RaiseCanExecuteChanged();
+            LogOutAndLoginCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -351,6 +426,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public bool CanRunCodexLogin => CodexEnvironmentStatus.Stage == CodexSetupStage.MissingAuthentication
         && !string.IsNullOrWhiteSpace(CodexEnvironmentStatus.ResolvedExecutablePath);
+
+    public bool CanLogOutAndLogIn => !string.IsNullOrWhiteSpace(GetLoginExecutablePath());
 
     public string CodexSetupTitle => CodexEnvironmentStatus.Stage switch
     {
@@ -406,9 +483,31 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public string CodexSetupVersionLabel => CodexEnvironmentStatus.Version;
 
+    public string CurrentAccountLabel
+    {
+        get
+        {
+            if (CodexEnvironmentStatus.HasAccountEmail)
+            {
+                return CodexEnvironmentStatus.AccountEmail;
+            }
+
+            if (CodexEnvironmentStatus.HasApiKey)
+            {
+                return _localization.SetupApiKeyLabel;
+            }
+
+            return _localization.NotSignedInLabel;
+        }
+    }
+
     public bool HasManagedMcpServers => ManagedMcpServers.Count > 0;
 
+    public bool HasDetectedMcpServers => McpServers.Count > 0;
+
     public bool HasSkills => Skills.Count > 0;
+
+    public bool HasRemoteSkills => RemoteSkills.Count > 0;
 
     public bool HasDetectedPromptSkills => DetectedPromptSkills.Count > 0;
 
@@ -434,6 +533,63 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public string CodexSkillsDirectory => _solutionContextService.GetCodexSkillsDirectory();
 
+    public string SelectedSettingsSection
+    {
+        get => _selectedSettingsSection;
+        private set
+        {
+            if (string.Equals(_selectedSettingsSection, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _selectedSettingsSection = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsAccountSectionSelected));
+            OnPropertyChanged(nameof(IsCodexMenuExpanded));
+            OnPropertyChanged(nameof(IsCodexSectionSelected));
+            OnPropertyChanged(nameof(IsIdeSectionSelected));
+            OnPropertyChanged(nameof(IsMcpSectionSelected));
+            OnPropertyChanged(nameof(IsSkillsSectionSelected));
+            OnPropertyChanged(nameof(IsLanguageSectionSelected));
+            OnPropertyChanged(nameof(IsSettingsDetailPanelVisible));
+            OnPropertyChanged(nameof(SelectedSettingsSectionTitle));
+        }
+    }
+
+    public bool IsAccountSectionSelected => string.Equals(SelectedSettingsSection, SettingsSectionAccount, StringComparison.Ordinal);
+
+    public bool IsCodexMenuExpanded => string.Equals(SelectedSettingsSection, SettingsSectionCodexMenu, StringComparison.Ordinal)
+        || IsCodexSectionSelected;
+
+    public bool IsCodexSectionSelected => string.Equals(SelectedSettingsSection, SettingsSectionCodex, StringComparison.Ordinal);
+
+    public bool IsIdeSectionSelected => string.Equals(SelectedSettingsSection, SettingsSectionIde, StringComparison.Ordinal);
+
+    public bool IsMcpSectionSelected => string.Equals(SelectedSettingsSection, SettingsSectionMcp, StringComparison.Ordinal);
+
+    public bool IsSkillsSectionSelected => string.Equals(SelectedSettingsSection, SettingsSectionSkills, StringComparison.Ordinal);
+
+    public bool IsLanguageSectionSelected => string.Equals(SelectedSettingsSection, SettingsSectionLanguage, StringComparison.Ordinal);
+
+    public bool IsSettingsDetailPanelVisible => IsAccountSectionSelected
+        || IsCodexSectionSelected
+        || IsIdeSectionSelected
+        || IsMcpSectionSelected
+        || IsSkillsSectionSelected;
+
+    public string SelectedSettingsSectionTitle => SelectedSettingsSection switch
+    {
+        SettingsSectionAccount => Localization.AccountTitle,
+        SettingsSectionCodex => Localization.CodexSettingsNav,
+        SettingsSectionIde => Localization.IdeSettingsNav,
+        SettingsSectionMcp => Localization.McpSettingsNav,
+        SettingsSectionSkills => Localization.SkillsSettingsNav,
+        _ => Localization.SettingsTitle
+    };
+
+    public string SettingsWorkspaceTitle => Localization.CodexSettingsNav;
+
     public string SelectedModel
     {
         get => _selectedModel;
@@ -450,6 +606,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             OnPropertyChanged();
             OnPropertyChanged(nameof(ProfileLabel));
             OnPropertyChanged(nameof(SelectedModelLabel));
+            SaveSettings();
         }
     }
 
@@ -468,6 +625,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             Settings.ReasoningEffort = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedReasoningEffortLabel));
+            SaveSettings();
         }
     }
 
@@ -485,6 +643,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             _selectedVerbosity = value;
             Settings.ModelVerbosity = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedVerbosityLabel));
+            SaveSettings();
         }
     }
 
@@ -502,6 +662,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             Settings.SandboxMode = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedSandboxModeLabel));
+            SaveSettings();
         }
     }
 
@@ -518,6 +679,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
             Settings.ApprovalPolicy = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedApprovalPolicyLabel));
+            SaveSettings();
         }
     }
 
@@ -527,7 +690,34 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public string SelectedModelLabel => GetOptionLabel(ModelOptions, SelectedModel, ModelOptions.FirstOrDefault()?.Label ?? "gpt-5.4");
 
+    public bool IsFastModeEnabled => string.Equals(SelectedServiceTier, "fast", StringComparison.Ordinal);
+
     public string SelectedReasoningEffortLabel => GetOptionLabel(ReasoningOptions, SelectedReasoningEffort, ReasoningOptions.FirstOrDefault(option => string.Equals(option.Value, "high", StringComparison.Ordinal))?.Label ?? "high");
+
+    public string SelectedVerbosityLabel => GetOptionLabel(VerbosityOptions, SelectedVerbosity, VerbosityOptions.FirstOrDefault(option => string.Equals(option.Value, "medium", StringComparison.Ordinal))?.Label ?? "medium");
+
+    public string SelectedServiceTier
+    {
+        get => Settings.ServiceTier;
+        set
+        {
+            value = EnsureOptionValue(value, ServiceTierOptions, string.Empty);
+            if (string.Equals(Settings.ServiceTier, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Settings.ServiceTier = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedServiceTierLabel));
+            OnPropertyChanged(nameof(IsFastModeEnabled));
+            SaveSettings();
+        }
+    }
+
+    public string SelectedServiceTierLabel => GetOptionLabel(ServiceTierOptions, SelectedServiceTier, ServiceTierOptions.FirstOrDefault()?.Label ?? string.Empty);
+
+    public string SelectedApprovalPolicyLabel => GetOptionLabel(ApprovalPolicyOptions, SelectedApprovalPolicy, ApprovalPolicyOptions.FirstOrDefault()?.Label ?? string.Empty);
 
     public string SelectedSandboxModeLabel => GetOptionLabel(SandboxModeOptions, SelectedSandboxMode, SandboxModeOptions.FirstOrDefault(option => string.Equals(option.Value, "read-only", StringComparison.Ordinal))?.Label ?? "read-only");
 
@@ -544,6 +734,23 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             Settings.PlanModeEnabled = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CollaborationModeLabel));
+            SaveSettings();
+        }
+    }
+
+    public bool IncludeIdeContextEnabled
+    {
+        get => Settings.IncludeIdeContext;
+        set
+        {
+            if (Settings.IncludeIdeContext == value)
+            {
+                return;
+            }
+
+            Settings.IncludeIdeContext = value;
+            OnPropertyChanged();
+            SaveSettings();
         }
     }
 
@@ -560,6 +767,133 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public string ContextTokensLabel => _lastKnownRemainingTokens > 0
         ? FormatCompactTokenCount(_lastKnownRemainingTokens)
         : string.Empty;
+
+    public string ContextWindowDetail => string.Format(
+        CultureInfo.CurrentUICulture,
+        "{0} used ({1} left)",
+        FormatPercent(Math.Max(0d, (_contextTokenBudget - _lastKnownRemainingTokens) / _contextTokenBudget)),
+        FormatPercent(Math.Max(0d, _lastKnownRemainingTokens / _contextTokenBudget)));
+
+    public string SkillSearchText
+    {
+        get => _skillSearchText;
+        set
+        {
+            if (string.Equals(_skillSearchText, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _skillSearchText = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(VisibleSkills));
+            OnPropertyChanged(nameof(VisibleRemoteSkills));
+        }
+    }
+
+    public string HistorySearchText
+    {
+        get => _historySearchText;
+        set
+        {
+            if (string.Equals(_historySearchText, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _historySearchText = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(VisibleThreads));
+            OnPropertyChanged(nameof(HasVisibleThreads));
+        }
+    }
+
+    public string LanguageSearchText
+    {
+        get => _languageSearchText;
+        set
+        {
+            if (string.Equals(_languageSearchText, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _languageSearchText = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(VisibleLanguageOptions));
+            OnPropertyChanged(nameof(HasVisibleLanguageOptions));
+        }
+    }
+
+    public IEnumerable<CodexSkillSummary> VisibleSkills => Skills.Where(skill =>
+        string.IsNullOrWhiteSpace(SkillSearchText)
+        || skill.DisplayTitle.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || skill.Name.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || skill.Summary.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0);
+
+    public IEnumerable<CodexRemoteSkillSummary> VisibleRemoteSkills => RemoteSkills.Where(skill =>
+        string.IsNullOrWhiteSpace(SkillSearchText)
+        || skill.Name.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || skill.Description.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0);
+
+    public IEnumerable<CodexThreadSummary> VisibleThreads => Threads.Where(thread =>
+        string.IsNullOrWhiteSpace(HistorySearchText)
+        || thread.Title.IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || thread.Subtitle.IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || thread.Preview.IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0);
+
+    public IEnumerable<CodexThreadSummary> RecentThreadsPreview => Threads.Take(3);
+
+    public IEnumerable<SelectionOption> VisibleLanguageOptions => LanguageOptions.Where(option =>
+        string.IsNullOrWhiteSpace(LanguageSearchText)
+        || option.Label.IndexOf(LanguageSearchText, StringComparison.OrdinalIgnoreCase) >= 0);
+
+    public string LanguageSearchPlaceholder => Localization.SearchLanguagesPlaceholder;
+
+    public CodexRateLimitSummary RateLimitSummary
+    {
+        get => _rateLimitSummary;
+        private set
+        {
+            _rateLimitSummary = value ?? new CodexRateLimitSummary();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasRateLimitData));
+        }
+    }
+
+    public bool HasRateLimitData => RateLimitSummary.HasAnyData;
+
+    public bool HasPreferredMcpServers => Settings.PreferredMcpServers.Count > 0;
+
+    public IEnumerable<string> PreferredMcpServers => Settings.PreferredMcpServers;
+
+    public bool HasThreads => Threads.Count > 0;
+
+    public bool HasVisibleThreads => VisibleThreads.Any();
+
+    public bool HasVisibleLanguageOptions => VisibleLanguageOptions.Any();
+
+    public bool HasMoreThreadsThanPreview => Threads.Count > 3;
+
+    public bool ShowRecentTasksPreview => HasThreads && Messages.Count == 0 && !ShowHistoryPanel && !ShowSettingsPanel;
+
+    public string SelectedLanguageTag
+    {
+        get => NormalizeLanguageTag(Settings.LanguageOverride);
+        set
+        {
+            var normalized = NormalizeLanguageTag(value);
+            if (string.Equals(NormalizeLanguageTag(Settings.LanguageOverride), normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            Settings.LanguageOverride = normalized;
+            ApplyLocalization(normalized);
+            OnPropertyChanged();
+            SaveSettings();
+        }
+    }
 
     public CodexThreadSummary? SelectedThread
     {
@@ -672,6 +1006,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             _codexProcessService.ResetThread();
         }
 
+        var ideContextSummary = await CaptureIdeContextSummaryAsync().ConfigureAwait(false);
+
         SaveSettings();
         AddPromptToHistory(promptToSend);
         ClearPersistedEventMessages();
@@ -689,6 +1025,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 promptToSend,
                 Settings,
                 AttachedImages.ToList(),
+                ideContextSummary,
                 onOutput: AppendAssistantOutput,
                 onError: AppendStderr,
                 onEventMessage: AddRuntimeEventMessage,
@@ -714,7 +1051,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
         catch (Exception ex)
         {
-            AddAssistantMessage(_localization.ExecutionError);
+            AddAssistantMessage(_localization.ExecutionError + " " + ex.Message);
             AppendOutput($"{Environment.NewLine}[erro] {ex.Message}{Environment.NewLine}");
         }
         finally
@@ -731,14 +1068,33 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ThreadHelper.JoinableTaskFactory.RunAsync(SendAsync);
     }
 
+    private async Task<string> CaptureIdeContextSummaryAsync()
+    {
+        if (!IncludeIdeContextEnabled)
+        {
+            return string.Empty;
+        }
+
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+        var summary = _solutionContextService.BuildIdeContextSummary(Settings.WorkingDirectory);
+        return string.IsNullOrWhiteSpace(summary)
+            ? string.Empty
+            : "Contexto atual da IDE:" + Environment.NewLine + summary;
+    }
+
     private void SaveSettings()
     {
         Settings.ManagedMcpServers = ManagedMcpServers
             .Select(CloneManagedMcpServer)
             .ToList();
+        Settings.PreferredMcpServers = Settings.PreferredMcpServers
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         Settings.DefaultModel = SelectedModel;
         Settings.ReasoningEffort = SelectedReasoningEffort;
         Settings.ModelVerbosity = SelectedVerbosity;
+        Settings.ServiceTier = SelectedServiceTier;
         Settings.ApprovalPolicy = SelectedApprovalPolicy;
         Settings.SandboxMode = SelectedSandboxMode;
         _settingsStore.Save(Settings);
@@ -945,6 +1301,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         Settings.DefaultModel = EnsureOptionValue(NormalizeModelValue(Settings.DefaultModel), CreateFallbackModelOptions(), "gpt-5.4");
         Settings.ReasoningEffort = EnsureOptionValue(NormalizeReasoningEffortValue(Settings.ReasoningEffort), ReasoningOptions, "high");
         Settings.ModelVerbosity = EnsureOptionValue(Settings.ModelVerbosity, VerbosityOptions, "medium");
+        Settings.ServiceTier = EnsureOptionValue(Settings.ServiceTier, ServiceTierOptions, string.Empty);
         Settings.SandboxMode = EnsureOptionValue(Settings.SandboxMode, SandboxModeOptions, "read-only");
         Settings.ApprovalPolicy = EnsureOptionValue(Settings.ApprovalPolicy, ApprovalPolicyOptions, string.Empty);
     }
@@ -997,6 +1354,22 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
     }
 
+    private static string NormalizeLanguageTag(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        return normalized.ToLowerInvariant() switch
+        {
+            "pt" => "pt-BR",
+            "en-us" => "en",
+            _ => normalized
+        };
+    }
+
     private static string GetOptionLabel(IEnumerable<SelectionOption> options, string? value, string fallbackLabel)
     {
         var normalized = (value ?? string.Empty).Trim();
@@ -1007,6 +1380,50 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
 
         return string.IsNullOrWhiteSpace(normalized) ? fallbackLabel : normalized;
+    }
+
+    private string GetLoginExecutablePath()
+    {
+        if (!string.IsNullOrWhiteSpace(CodexEnvironmentStatus.ResolvedExecutablePath))
+        {
+            return CodexEnvironmentStatus.ResolvedExecutablePath;
+        }
+
+        return Settings.CodexExecutablePath ?? string.Empty;
+    }
+
+    private void ApplyLocalization(string? languageOverride)
+    {
+        _localization = new LocalizationService(languageOverride);
+        CodexToolWindowManager.RefreshSettingsToolWindowCaption(_localization);
+        OnPropertyChanged(nameof(Localization));
+        OnPropertyChanged(nameof(ReasoningOptions));
+        OnPropertyChanged(nameof(ReasoningMenuOptions));
+        OnPropertyChanged(nameof(VerbosityOptions));
+        OnPropertyChanged(nameof(ServiceTierOptions));
+        OnPropertyChanged(nameof(ApprovalPolicyOptions));
+        OnPropertyChanged(nameof(SandboxModeOptions));
+        OnPropertyChanged(nameof(LanguageOptions));
+        OnPropertyChanged(nameof(SelectedLanguageTag));
+        OnPropertyChanged(nameof(SelectedReasoningEffortLabel));
+        OnPropertyChanged(nameof(SelectedVerbosityLabel));
+        OnPropertyChanged(nameof(SelectedServiceTierLabel));
+        OnPropertyChanged(nameof(SelectedApprovalPolicyLabel));
+        OnPropertyChanged(nameof(SelectedSandboxModeLabel));
+        OnPropertyChanged(nameof(CollaborationModeLabel));
+        OnPropertyChanged(nameof(SelectedSettingsSectionTitle));
+        OnPropertyChanged(nameof(SettingsWorkspaceTitle));
+        OnPropertyChanged(nameof(CurrentAccountLabel));
+        OnPropertyChanged(nameof(CodexSetupTitle));
+        OnPropertyChanged(nameof(CodexSetupSummary));
+        OnPropertyChanged(nameof(CodexSetupDetail));
+        OnPropertyChanged(nameof(CodexSetupAuthenticationLabel));
+        OnPropertyChanged(nameof(LanguageSearchPlaceholder));
+        OnPropertyChanged(nameof(VisibleThreads));
+        OnPropertyChanged(nameof(VisibleSkills));
+        OnPropertyChanged(nameof(VisibleRemoteSkills));
+        OnPropertyChanged(nameof(VisibleLanguageOptions));
+        OnPropertyChanged(string.Empty);
     }
 
     private void OpenCodexConfig()
@@ -1020,8 +1437,37 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void OpenSettingsPanel()
     {
+        SelectedSettingsSection = string.Empty;
         ShowSettingsPanel = true;
         ShowHistoryPanel = false;
+        OnPropertyChanged(nameof(IsHistoryViewSelected));
+        OnPropertyChanged(nameof(IsSettingsViewSelected));
+    }
+
+    private void OpenHistoryPanel()
+    {
+        ShowHistoryPanel = true;
+        ShowSettingsPanel = false;
+        OnPropertyChanged(nameof(IsHistoryViewSelected));
+        OnPropertyChanged(nameof(IsSettingsViewSelected));
+    }
+
+    private void OpenCodexDocs()
+    {
+        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            _solutionContextService.OpenUrl("https://openai.com/codex/get-started/");
+        });
+    }
+
+    private void OpenKeyboardShortcuts()
+    {
+        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            _solutionContextService.OpenUrl("https://learn.microsoft.com/visualstudio/ide/identifying-and-customizing-keyboard-shortcuts-in-visual-studio");
+        });
     }
 
     private void OpenCodexSkillsFolder()
@@ -1069,7 +1515,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void RunCodexLogin(object? _)
     {
-        if (!CanRunCodexLogin)
+        var executablePath = GetLoginExecutablePath();
+        if (string.IsNullOrWhiteSpace(executablePath))
         {
             return;
         }
@@ -1077,7 +1524,47 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ThreadHelper.JoinableTaskFactory.Run(async delegate
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-            _codexEnvironmentService.LaunchLoginTerminal(CodexEnvironmentStatus.ResolvedExecutablePath);
+            _codexEnvironmentService.LaunchLoginTerminal(executablePath);
+        });
+    }
+
+    private void LogOutAndLogin(object? _)
+    {
+        var executablePath = GetLoginExecutablePath();
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return;
+        }
+
+        ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+        {
+            try
+            {
+                _codexEnvironmentService.DeleteAuthFile(CodexEnvironmentStatus.AuthFilePath);
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                _codexEnvironmentService.LaunchLoginTerminal(executablePath);
+                await RefreshCodexStatusAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("[auth] " + ex.Message + Environment.NewLine);
+            }
+        });
+    }
+
+    private void LogOut(object? _)
+    {
+        ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+        {
+            try
+            {
+                _codexEnvironmentService.DeleteAuthFile(CodexEnvironmentStatus.AuthFilePath);
+                await RefreshCodexStatusAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("[auth] " + ex.Message + Environment.NewLine);
+            }
         });
     }
 
@@ -1147,19 +1634,236 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void ToggleHistoryPanel()
     {
-        ShowHistoryPanel = !ShowHistoryPanel;
-        if (ShowHistoryPanel)
+        var nextState = !ShowHistoryPanel;
+        ShowHistoryPanel = nextState;
+        if (nextState)
         {
             ShowSettingsPanel = false;
         }
+
+        OnPropertyChanged(nameof(IsHistoryViewSelected));
+        OnPropertyChanged(nameof(IsSettingsViewSelected));
     }
 
     private void ToggleSettingsPanel()
     {
-        ShowSettingsPanel = !ShowSettingsPanel;
-        if (ShowSettingsPanel)
+        var nextState = !ShowSettingsPanel;
+        ShowSettingsPanel = nextState;
+        if (nextState)
         {
             ShowHistoryPanel = false;
+            SelectedSettingsSection = string.Empty;
+        }
+
+        OnPropertyChanged(nameof(IsHistoryViewSelected));
+        OnPropertyChanged(nameof(IsSettingsViewSelected));
+    }
+
+    private void CloseSidebar()
+    {
+        ShowHistoryPanel = false;
+        ShowSettingsPanel = false;
+        OnPropertyChanged(nameof(IsHistoryViewSelected));
+        OnPropertyChanged(nameof(IsSettingsViewSelected));
+    }
+
+    private void CloseSettingsDetail()
+    {
+        SelectedSettingsSection = string.Empty;
+    }
+
+    private void SelectSettingsSection(object? parameter)
+    {
+        if (parameter is not string section || string.IsNullOrWhiteSpace(section))
+        {
+            return;
+        }
+
+        if ((string.Equals(section, SettingsSectionCodexMenu, StringComparison.Ordinal)
+                || string.Equals(section, SettingsSectionLanguage, StringComparison.Ordinal))
+            && string.Equals(SelectedSettingsSection, section, StringComparison.Ordinal))
+        {
+            SelectedSettingsSection = string.Empty;
+        }
+        else
+        {
+            SelectedSettingsSection = section;
+        }
+
+        ShowSettingsPanel = true;
+        ShowHistoryPanel = false;
+        OnPropertyChanged(nameof(IsHistoryViewSelected));
+        OnPropertyChanged(nameof(IsSettingsViewSelected));
+
+        if (IsExternalSettingsSection(section))
+        {
+            PrepareExternalSettingsSection(section);
+            CodexToolWindowManager.ShowSettingsToolWindow(section);
+        }
+    }
+
+    public void EnsureExternalSettingsSection(string section)
+    {
+        if (string.IsNullOrWhiteSpace(section))
+        {
+            return;
+        }
+
+        SelectedSettingsSection = section;
+        ShowSettingsPanel = false;
+        ShowHistoryPanel = false;
+        PrepareExternalSettingsSection(section);
+    }
+
+    private static bool IsExternalSettingsSection(string section)
+    {
+        return string.Equals(section, SettingsSectionAccount, StringComparison.Ordinal)
+            || string.Equals(section, SettingsSectionCodex, StringComparison.Ordinal)
+            || string.Equals(section, SettingsSectionMcp, StringComparison.Ordinal)
+            || string.Equals(section, SettingsSectionSkills, StringComparison.Ordinal);
+    }
+
+    private void PrepareExternalSettingsSection(string section)
+    {
+        if (string.Equals(section, SettingsSectionMcp, StringComparison.Ordinal)
+            || string.Equals(section, SettingsSectionSkills, StringComparison.Ordinal))
+        {
+            RefreshIntegrations();
+            return;
+        }
+
+        if (string.Equals(section, SettingsSectionAccount, StringComparison.Ordinal)
+            || string.Equals(section, SettingsSectionCodex, StringComparison.Ordinal))
+        {
+            RefreshCodexStatus();
+        }
+    }
+
+    private void TogglePreferredMcp(object? parameter)
+    {
+        var serverName = parameter switch
+        {
+            CodexMcpServerSummary server => server.Name,
+            string value => value,
+            _ => string.Empty
+        };
+
+        if (string.IsNullOrWhiteSpace(serverName))
+        {
+            return;
+        }
+
+        var preferredServers = Settings.PreferredMcpServers;
+        var existingIndex = preferredServers.FindIndex(name => string.Equals(name, serverName, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0)
+        {
+            preferredServers.RemoveAt(existingIndex);
+        }
+        else
+        {
+            preferredServers.Add(serverName);
+        }
+
+        SyncMcpShortcutSelections();
+        OnPropertyChanged(nameof(HasPreferredMcpServers));
+        OnPropertyChanged(nameof(PreferredMcpServers));
+        SaveSettings();
+    }
+
+    private void SelectReasoningEffort(object? parameter)
+    {
+        if (parameter is string value)
+        {
+            SelectedReasoningEffort = value;
+        }
+    }
+
+    private void SelectVerbosity(object? parameter)
+    {
+        if (parameter is string value)
+        {
+            SelectedVerbosity = value;
+        }
+    }
+
+    private void SelectApprovalPolicy(object? parameter)
+    {
+        if (parameter is string value)
+        {
+            SelectedApprovalPolicy = value;
+        }
+    }
+
+    private void SelectSandboxMode(object? parameter)
+    {
+        if (parameter is string value)
+        {
+            SelectedSandboxMode = value;
+        }
+    }
+
+    private void SelectLanguage(object? parameter)
+    {
+        if (parameter is string value)
+        {
+            SelectedLanguageTag = value;
+        }
+    }
+
+    private void ToggleSkillEnabled(object? parameter)
+    {
+        if (parameter is not CodexSkillSummary skill)
+        {
+            return;
+        }
+
+        ThreadHelper.JoinableTaskFactory.RunAsync(() => ToggleSkillEnabledAsync(skill));
+    }
+
+    private async Task ToggleSkillEnabledAsync(CodexSkillSummary skill)
+    {
+        var requestedValue = skill.IsEnabled;
+
+        try
+        {
+            var effectiveValue = await _codexProcessService.SetSkillEnabledAsync(Settings, skill.Path, requestedValue, CancellationToken.None).ConfigureAwait(false);
+            RunOnUiThread(() => skill.IsEnabled = effectiveValue);
+            _codexProcessService.InvalidateSkillsCache();
+            await RefreshServerSurfacesAsync(forceSkillReload: true).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            RunOnUiThread(() => skill.IsEnabled = !requestedValue);
+            AppendOutput("[skills] " + ex.Message + Environment.NewLine);
+        }
+    }
+
+    private void InstallRemoteSkill(object? parameter)
+    {
+        if (parameter is not CodexRemoteSkillSummary skill)
+        {
+            return;
+        }
+
+        ThreadHelper.JoinableTaskFactory.RunAsync(() => InstallRemoteSkillAsync(skill));
+    }
+
+    private async Task InstallRemoteSkillAsync(CodexRemoteSkillSummary skill)
+    {
+        try
+        {
+            var path = await _codexProcessService.InstallRemoteSkillAsync(Settings, skill.Id, CancellationToken.None).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                _solutionContextService.OpenPath(path);
+            }
+
+            _codexProcessService.InvalidateSkillsCache();
+            await RefreshServerSurfacesAsync(forceSkillReload: true).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            AppendOutput("[skills-remote] " + ex.Message + Environment.NewLine);
         }
     }
 
@@ -1227,9 +1931,14 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             Apps.Clear();
             McpServers.Clear();
             Skills.Clear();
+            RemoteSkills.Clear();
             DetectedPromptSkills.Clear();
+            RateLimitSummary = new CodexRateLimitSummary();
             PromptDisplayText = string.Empty;
             OnPropertyChanged(nameof(HasDetectedPromptSkills));
+            OnPropertyChanged(nameof(HasRemoteSkills));
+            OnPropertyChanged(nameof(VisibleSkills));
+            OnPropertyChanged(nameof(VisibleRemoteSkills));
         });
     }
 
@@ -1304,7 +2013,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             var appsTask = _codexProcessService.ListAppsAsync(Settings, CancellationToken.None);
             var mcpTask = _codexProcessService.ListMcpServersAsync(Settings, CancellationToken.None);
             var skillsTask = _codexProcessService.ListSkillsAsync(Settings, CancellationToken.None, forceSkillReload);
-            await Task.WhenAll(appsTask, mcpTask, skillsTask).ConfigureAwait(false);
+            var remoteSkillsTask = GetRemoteSkillsSafeAsync();
+            var rateLimitsTask = GetRateLimitsSafeAsync();
+            await Task.WhenAll(appsTask, mcpTask, skillsTask, remoteSkillsTask, rateLimitsTask).ConfigureAwait(false);
 
             RunOnUiThread(() =>
             {
@@ -1319,17 +2030,58 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 {
                     McpServers.Add(server);
                 }
+                SyncMcpShortcutSelections();
 
                 Skills.Clear();
                 foreach (var skill in skillsTask.Result)
                 {
                     Skills.Add(skill);
                 }
+
+                RemoteSkills.Clear();
+                foreach (var skill in remoteSkillsTask.Result)
+                {
+                    if (Skills.Any(installed => string.Equals(installed.Name, skill.Name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+
+                    RemoteSkills.Add(skill);
+                }
+
+                RateLimitSummary = rateLimitsTask.Result;
+                OnPropertyChanged(nameof(VisibleSkills));
+                OnPropertyChanged(nameof(VisibleRemoteSkills));
+                OnPropertyChanged(nameof(HasRemoteSkills));
             });
         }
         catch (Exception ex)
         {
             AppendOutput("[server] " + ex.Message + Environment.NewLine);
+        }
+    }
+
+    private async Task<IReadOnlyList<CodexRemoteSkillSummary>> GetRemoteSkillsSafeAsync()
+    {
+        try
+        {
+            return await _codexProcessService.ListRemoteSkillsAsync(Settings, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            return Array.Empty<CodexRemoteSkillSummary>();
+        }
+    }
+
+    private async Task<CodexRateLimitSummary> GetRateLimitsSafeAsync()
+    {
+        try
+        {
+            return await _codexProcessService.GetAccountRateLimitsAsync(Settings, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            return new CodexRateLimitSummary();
         }
     }
 
@@ -1362,7 +2114,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 }
 
                 Output = string.Empty;
-                ShowHistoryPanel = false;
+                CloseSidebar();
             });
 
             await RefreshThreadsAsync(conversation.Thread.ThreadId).ConfigureAwait(false);
@@ -1398,6 +2150,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             Messages.Clear();
             Output = string.Empty;
             UpdateContextEstimate();
+            CloseSidebar();
         });
 
         ThreadHelper.JoinableTaskFactory.RunAsync(() => RefreshThreadsAsync(null));
@@ -1619,11 +2372,44 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         OnPropertyChanged(nameof(HasManagedMcpServers));
     }
 
+    private void HandleThreadsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasThreads));
+        OnPropertyChanged(nameof(VisibleThreads));
+        OnPropertyChanged(nameof(HasVisibleThreads));
+        OnPropertyChanged(nameof(RecentThreadsPreview));
+        OnPropertyChanged(nameof(HasMoreThreadsThanPreview));
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+    }
+
+    private void HandleMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+    }
+
+    private void HandleMcpServersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncMcpShortcutSelections();
+        OnPropertyChanged(nameof(HasDetectedMcpServers));
+        OnPropertyChanged(nameof(HasPreferredMcpServers));
+        OnPropertyChanged(nameof(PreferredMcpServers));
+    }
+
     private void HandleSkillsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasSkills));
         RefreshDetectedPromptSkills();
         RefreshDisplayedUserMessages();
+        OnPropertyChanged(nameof(VisibleSkills));
+    }
+
+    private void SyncMcpShortcutSelections()
+    {
+        var selectedServers = new HashSet<string>(Settings.PreferredMcpServers, StringComparer.OrdinalIgnoreCase);
+        foreach (var server in McpServers)
+        {
+            server.IsShortcutSelected = selectedServers.Contains(server.Name);
+        }
     }
 
     private static CodexManagedMcpServer CloneManagedMcpServer(CodexManagedMcpServer? server)
@@ -1805,6 +2591,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             _lastKnownRemainingTokens = Math.Max(0d, _contextTokenBudget - totalTokens);
             OnPropertyChanged(nameof(ContextTokensLabel));
+            OnPropertyChanged(nameof(ContextWindowDetail));
         });
 
         SetContextRemainingRatio(Math.Max(0d, 1d - (totalTokens / _contextTokenBudget)));
@@ -1819,6 +2606,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             _lastKnownRemainingTokens = Math.Max(0d, _contextTokenBudget - estimated);
             OnPropertyChanged(nameof(ContextTokensLabel));
+            OnPropertyChanged(nameof(ContextWindowDetail));
         });
         SetContextRemainingRatio(Math.Max(0d, 1d - (estimated / _contextTokenBudget)));
     }
@@ -2010,6 +2798,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
 
         return Math.Round(tokens).ToString(CultureInfo.CurrentUICulture);
+    }
+
+    private static string FormatPercent(double value)
+    {
+        return Math.Round(value * 100d).ToString("0", CultureInfo.CurrentUICulture) + "%";
     }
 
     private static string ExtractCurrentMention(string prompt)

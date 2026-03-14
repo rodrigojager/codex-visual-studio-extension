@@ -16,7 +16,11 @@ public sealed class CodexEnvironmentStatus
 
     public bool HasApiKey { get; set; }
 
+    public string AccountEmail { get; set; } = string.Empty;
+
     public string ErrorDetail { get; set; } = string.Empty;
 
     public bool IsReady => Stage == CodexSetupStage.Ready;
+
+    public bool HasAccountEmail => !string.IsNullOrWhiteSpace(AccountEmail);
 }

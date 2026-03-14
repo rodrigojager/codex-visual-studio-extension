@@ -26,10 +26,12 @@ public sealed class ExtensionSettingsStore
             var settings = JsonConvert.DeserializeObject<CodexExtensionSettings>(json) ?? new CodexExtensionSettings();
             settings.PromptHistory ??= new();
             settings.CodexExecutablePath ??= "codex.cmd";
+            settings.LanguageOverride ??= "";
             settings.WorkingDirectory ??= "";
             settings.DefaultModel ??= "";
             settings.ReasoningEffort ??= "";
             settings.ModelVerbosity ??= "";
+            settings.ServiceTier ??= "";
             settings.Profile ??= "";
             settings.ApprovalPolicy ??= "";
             settings.SandboxMode ??= "";
@@ -39,6 +41,7 @@ public sealed class ExtensionSettingsStore
             settings.CurrentThreadId ??= "";
             settings.LastThreadWorkingDirectory ??= "";
             settings.ManagedMcpServers ??= new();
+            settings.PreferredMcpServers ??= new();
             return settings;
         }
         catch

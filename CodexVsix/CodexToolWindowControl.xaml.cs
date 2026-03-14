@@ -9,6 +9,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
+using System.Windows.Threading;
 using CodexVsix.Models;
 using CodexVsix.ViewModels;
 
@@ -25,14 +26,13 @@ public partial class CodexToolWindowControl : UserControl
     public CodexToolWindowControl()
     {
         InitializeComponent();
-        _viewModel = new CodexToolWindowViewModel();
+        _viewModel = CodexViewModelHost.GetOrCreate();
         DataContext = _viewModel;
         _viewModel.Messages.CollectionChanged += OnMessagesCollectionChanged;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
         PreviewKeyDown += OnPreviewKeyDown;
-        Unloaded += OnUnloaded;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -48,14 +48,9 @@ public partial class CodexToolWindowControl : UserControl
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control && PromptTextBox.IsKeyboardFocusWithin)
+        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && PromptTextBox.IsKeyboardFocusWithin)
         {
-            if (_viewModel.SendCommand.CanExecute(null))
-            {
-                _viewModel.SendCommand.Execute(null);
-            }
-
-            e.Handled = true;
+            ExecuteSendShortcut(e);
             return;
         }
 
@@ -182,6 +177,125 @@ public partial class CodexToolWindowControl : UserControl
         _selectionAnchorElement = element;
         _selectionAnchorPosition = GetSelectionPoint(element, e.GetPosition(element));
         _isSelectingAcrossBubbles = true;
+    }
+
+    private void OnMenuButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.ContextMenu is null)
+        {
+            return;
+        }
+
+        element.ContextMenu.DataContext = element.DataContext;
+        element.ContextMenu.PlacementTarget = element;
+        element.ContextMenu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void OnOpenHistoryPanelClick(object sender, RoutedEventArgs e)
+    {
+        ExecuteViewModelCommand(_viewModel.OpenHistoryPanelCommand);
+        e.Handled = true;
+    }
+
+    private void OnOpenSettingsPanelClick(object sender, RoutedEventArgs e)
+    {
+        ExecuteViewModelCommand(_viewModel.OpenSettingsPanelCommand);
+        e.Handled = true;
+    }
+
+    private void OnCloseSidebarClick(object sender, RoutedEventArgs e)
+    {
+        ExecuteViewModelCommand(_viewModel.CloseSidebarCommand);
+        e.Handled = true;
+    }
+
+    private void OnSelectSettingsSectionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element)
+        {
+            return;
+        }
+
+        var parameter = element.Tag ?? element.DataContext;
+        ExecuteViewModelCommand(_viewModel.SelectSettingsSectionCommand, parameter);
+        e.Handled = true;
+    }
+
+    private void OnPromptTextBoxPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            ExecuteSendShortcut(e);
+        }
+    }
+
+    private void OnLanguageOptionsSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ListBox listBox || listBox.SelectedValue is not string value)
+        {
+            return;
+        }
+
+        _viewModel.SelectedLanguageTag = value;
+    }
+
+    private void OnLanguageOptionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.Tag is not string value)
+        {
+            return;
+        }
+
+        _viewModel.SelectedLanguageTag = value;
+        if (_viewModel.CloseSidebarCommand.CanExecute(null))
+        {
+            _viewModel.CloseSidebarCommand.Execute(null);
+        }
+        e.Handled = true;
+    }
+
+    private void OnLanguageOptionPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.Tag is not string value)
+        {
+            return;
+        }
+
+        _viewModel.SelectedLanguageTag = value;
+        if (_viewModel.CloseSidebarCommand.CanExecute(null))
+        {
+            _viewModel.CloseSidebarCommand.Execute(null);
+        }
+        e.Handled = true;
+    }
+
+    private void OnLanguageOptionsPanelIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            LanguageSearchTextBox.Focus();
+            Keyboard.Focus(LanguageSearchTextBox);
+        }), DispatcherPriority.Input);
+    }
+
+    private void OnHistorySearchPanelIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            HistorySearchTextBox.Focus();
+            Keyboard.Focus(HistorySearchTextBox);
+        }), DispatcherPriority.Input);
     }
 
     protected override void OnPreviewMouseMove(MouseEventArgs e)
@@ -507,6 +621,24 @@ public partial class CodexToolWindowControl : UserControl
         };
     }
 
+    private void ExecuteSendShortcut(KeyEventArgs e)
+    {
+        if (_viewModel.SendCommand.CanExecute(null))
+        {
+            _viewModel.SendCommand.Execute(null);
+        }
+
+        e.Handled = true;
+    }
+
+    private static void ExecuteViewModelCommand(ICommand command, object? parameter = null)
+    {
+        if (command.CanExecute(parameter))
+        {
+            command.Execute(parameter);
+        }
+    }
+
     private static FrameworkElement? FindSelectableChatTextBox(DependencyObject? origin)
     {
         var current = origin;
@@ -563,21 +695,5 @@ public partial class CodexToolWindowControl : UserControl
         {
             return null;
         }
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        foreach (var item in _viewModel.Messages)
-        {
-            item.PropertyChanged -= OnMessagePropertyChanged;
-        }
-
-        _viewModel.Messages.CollectionChanged -= OnMessagesCollectionChanged;
-        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        Loaded -= OnLoaded;
-        SizeChanged -= OnSizeChanged;
-        Unloaded -= OnUnloaded;
-        PreviewKeyDown -= OnPreviewKeyDown;
-        _viewModel.Dispose();
     }
 }

@@ -10,13 +10,46 @@ public sealed class LocalizationService
     {
         ["TopicsTitle"] = "Topics",
         ["HistoryTitle"] = "History",
+        ["HistoryTopicsTitle"] = "Previous topics",
         ["UseButton"] = "Use",
         ["NewTopicButton"] = "New topic",
         ["RenameTopicButton"] = "Rename",
         ["RenameTopicPlaceholder"] = "Rename selected topic",
+        ["CloseButton"] = "Close",
+        ["AccountTitle"] = "Account",
+        ["AccountSubtitle"] = "Manage the Codex account used by this extension.",
+        ["SignedInAsLabel"] = "Signed in as",
+        ["NotSignedInLabel"] = "Not signed in",
+        ["LogOutAndLogInButton"] = "Log out and log in again",
+        ["CodexSettingsNav"] = "Codex settings",
+        ["IdeSettingsNav"] = "IDE settings",
+        ["McpSettingsNav"] = "MCP settings",
+        ["SkillsSettingsNav"] = "Skills settings",
+        ["LanguageNav"] = "Language",
+        ["HistoryNav"] = "History",
+        ["LanguageTitle"] = "Language",
+        ["LanguageSubtitle"] = "Override automatic language detection for the extension UI.",
+        ["LanguageAutoOption"] = "Automatic",
+        ["CurrentLanguageLabel"] = "Current language",
+        ["HistorySearchPlaceholder"] = "Search recent tasks",
+        ["AllTasksLabel"] = "All tasks",
+        ["ViewAllTasksLabel"] = "View all",
+        ["TasksTitle"] = "Tasks",
+        ["RecentTasksTitle"] = "Recent tasks",
+        ["NoTasksDetected"] = "No recent tasks yet.",
+        ["PersonalAccountLabel"] = "Personal account",
+        ["OpenAgentSettingsLabel"] = "Open Agent settings",
+        ["ReadDocsLabel"] = "Read docs",
+        ["OpenConfigTomlLabel"] = "Open config.toml",
+        ["SearchLanguagesPlaceholder"] = "Search language",
+        ["NoLanguagesFound"] = "No languages found.",
+        ["KeyboardShortcutsLabel"] = "Keyboard shortcuts",
+        ["LogOutLabel"] = "Log out",
+        ["NoTopicsAvailable"] = "No previous topics yet.",
         ["PlanModeLabel"] = "Plan mode",
         ["QuestionModeLabel"] = "Question mode",
         ["AgentModeLabel"] = "Agent mode",
+        ["ReasoningEffortLabel"] = "Reasoning effort",
         ["AppsTitle"] = "Apps",
         ["McpServersTitle"] = "MCP servers",
         ["DetectedSkillsTitle"] = "Detected skills",
@@ -41,6 +74,27 @@ public sealed class LocalizationService
         ["ManagedMcpHint"] = "Only enabled and valid entries are applied. Valid names use letters, numbers, '-' or '_'.",
         ["SkillsTitle"] = "Skills",
         ["SkillsDescription"] = "Create and open global skills from the same place you manage the Codex integration.",
+        ["SkillsLearnMore"] = "Give Codex superpowers.",
+        ["InstalledSkillsTitle"] = "Installed",
+        ["RecommendedSkillsTitle"] = "Recommended",
+        ["SearchSkillsPlaceholder"] = "Search skills",
+        ["InstallSkillButton"] = "Install",
+        ["NoRecommendedSkills"] = "No recommended skills available.",
+        ["IncludeIdeContextLabel"] = "Include IDE context",
+        ["AddPhotosFilesMenu"] = "Add photos & files",
+        ["McpShortcutsTitle"] = "MCP shortcuts",
+        ["PermissionsTitle"] = "Permissions",
+        ["DefaultPermissionsLabel"] = "Default permissions",
+        ["ContextWindowTitle"] = "Context window",
+        ["ContinueInTitle"] = "Continue in",
+        ["LocalProjectLabel"] = "Local project",
+        ["RateLimitsTitle"] = "Rate limits remaining",
+        ["RateLimitsUnavailable"] = "Rate limits unavailable.",
+        ["PlanLabelShort"] = "Plan",
+        ["PrimaryWindowLabel"] = "Primary window",
+        ["SecondaryWindowLabel"] = "Secondary window",
+        ["CreditsLabel"] = "Credits",
+        ["PreferredMcpTitle"] = "Preferred MCPs",
         ["SkillNameLabel"] = "Skill name",
         ["SkillDescriptionLabel"] = "Initial description",
         ["CreateSkillButton"] = "Create skill",
@@ -49,13 +103,14 @@ public sealed class LocalizationService
         ["SkillOpenButton"] = "Open",
         ["RefreshStatusButton"] = "Refresh",
         ["EnabledLabel"] = "Enabled",
+        ["OpenPanelButton"] = "Open",
         ["NoSkillsDetected"] = "No skills detected yet.",
         ["NoManagedMcpServers"] = "No managed MCP server configured.",
         ["VerbosityLabel"] = "Verbosity",
         ["ApprovalPolicyLabel"] = "Approval policy",
         ["RawOutputLabel"] = "Raw output",
         ["InsertButton"] = "Insert",
-        ["ComposerPlaceholder"] = "Ask for additional changes",
+        ["ComposerPlaceholder"] = "Ask Codex anything",
         ["AddAttachmentTooltip"] = "Attach image or file",
         ["PasteImageTooltip"] = "Paste image from clipboard",
         ["SendTooltip"] = "Send prompt",
@@ -118,20 +173,40 @@ public sealed class LocalizationService
         ["ReasoningMedium"] = "Medium",
         ["ReasoningHigh"] = "High",
         ["ReasoningMax"] = "Maximum",
-        ["ReasoningMinimal"] = "Minimal"
+        ["ReasoningMinimal"] = "Minimal",
+        ["SpeedLabel"] = "Speed",
+        ["SpeedDefault"] = "Standard",
+        ["SpeedFast"] = "Fast",
+        ["SpeedFlex"] = "Flex"
     };
 
     private static readonly IReadOnlyDictionary<string, string> PortugueseStrings = new Dictionary<string, string>
     {
         ["TopicsTitle"] = "Tópicos",
         ["HistoryTitle"] = "Histórico",
+        ["HistoryTopicsTitle"] = "Conversas anteriores",
         ["UseButton"] = "Usar",
         ["NewTopicButton"] = "Novo tópico",
         ["RenameTopicButton"] = "Renomear",
         ["RenameTopicPlaceholder"] = "Renomear tópico selecionado",
+        ["TasksTitle"] = "Tarefas",
+        ["RecentTasksTitle"] = "Tarefas recentes",
+        ["HistorySearchPlaceholder"] = "Procurar em tarefas recentes",
+        ["AllTasksLabel"] = "Todas as tarefas",
+        ["ViewAllTasksLabel"] = "Ver todas",
+        ["NoTasksDetected"] = "Nenhuma tarefa recente ainda.",
+        ["PersonalAccountLabel"] = "Conta pessoal",
+        ["OpenAgentSettingsLabel"] = "Abrir configurações do agente",
+        ["ReadDocsLabel"] = "Ler documentação",
+        ["OpenConfigTomlLabel"] = "Abrir config.toml",
+        ["SearchLanguagesPlaceholder"] = "Procurar idioma",
+        ["NoLanguagesFound"] = "Nenhum idioma encontrado.",
+        ["KeyboardShortcutsLabel"] = "Atalhos do teclado",
+        ["LogOutLabel"] = "Sair",
         ["PlanModeLabel"] = "Modo planejamento",
         ["QuestionModeLabel"] = "Modo pergunta",
         ["AgentModeLabel"] = "Modo agente",
+        ["ReasoningEffortLabel"] = "Esforço de raciocínio",
         ["AppsTitle"] = "Apps",
         ["McpServersTitle"] = "Servidores MCP",
         ["SettingsTitle"] = "Configuração e detalhes",
@@ -141,7 +216,7 @@ public sealed class LocalizationService
         ["ApprovalPolicyLabel"] = "Política de aprovação",
         ["RawOutputLabel"] = "Saída bruta",
         ["InsertButton"] = "Inserir",
-        ["ComposerPlaceholder"] = "Pedir alterações adicionais",
+        ["ComposerPlaceholder"] = "Pergunte qualquer coisa ao Codex",
         ["AddAttachmentTooltip"] = "Anexar imagem ou arquivo",
         ["PasteImageTooltip"] = "Colar imagem da área de transferência",
         ["SendTooltip"] = "Enviar prompt",
@@ -182,7 +257,11 @@ public sealed class LocalizationService
         ["ReasoningMedium"] = "Média",
         ["ReasoningHigh"] = "Alta",
         ["ReasoningMax"] = "Máxima",
-        ["ReasoningMinimal"] = "Mínima"
+        ["ReasoningMinimal"] = "Mínima",
+        ["SpeedLabel"] = "Velocidade",
+        ["SpeedDefault"] = "Padrão",
+        ["SpeedFast"] = "Rápida",
+        ["SpeedFlex"] = "Flex"
     };
 
     private static readonly IReadOnlyDictionary<string, string> SpanishStrings = new Dictionary<string, string>
@@ -205,7 +284,7 @@ public sealed class LocalizationService
         ["ApprovalPolicyLabel"] = "Política de aprobación",
         ["RawOutputLabel"] = "Salida sin procesar",
         ["InsertButton"] = "Insertar",
-        ["ComposerPlaceholder"] = "Pedir cambios adicionales",
+        ["ComposerPlaceholder"] = "Pregúntale cualquier cosa a Codex",
         ["AddAttachmentTooltip"] = "Adjuntar imagen o archivo",
         ["PasteImageTooltip"] = "Pegar imagen del portapapeles",
         ["SendTooltip"] = "Enviar prompt",
@@ -269,7 +348,7 @@ public sealed class LocalizationService
         ["ApprovalPolicyLabel"] = "Politique d'approbation",
         ["RawOutputLabel"] = "Sortie brute",
         ["InsertButton"] = "Insérer",
-        ["ComposerPlaceholder"] = "Demander des modifications supplémentaires",
+        ["ComposerPlaceholder"] = "Demandez n'importe quoi à Codex",
         ["AddAttachmentTooltip"] = "Joindre une image ou un fichier",
         ["PasteImageTooltip"] = "Coller l'image du presse-papiers",
         ["SendTooltip"] = "Envoyer le prompt",
@@ -333,7 +412,7 @@ public sealed class LocalizationService
         ["ApprovalPolicyLabel"] = "Genehmigungsrichtlinie",
         ["RawOutputLabel"] = "Rohausgabe",
         ["InsertButton"] = "Einfügen",
-        ["ComposerPlaceholder"] = "Zusätzliche Änderungen anfordern",
+        ["ComposerPlaceholder"] = "Fragen Sie Codex alles",
         ["AddAttachmentTooltip"] = "Bild oder Datei anhängen",
         ["PasteImageTooltip"] = "Bild aus der Zwischenablage einfügen",
         ["SendTooltip"] = "Prompt senden",
@@ -379,13 +458,9 @@ public sealed class LocalizationService
 
     private readonly IReadOnlyDictionary<string, string> _strings;
 
-    public LocalizationService()
+    public LocalizationService(string? languageOverride = null)
     {
-        var preferredCulture = !string.IsNullOrWhiteSpace(CultureInfo.CurrentUICulture.Name)
-            ? CultureInfo.CurrentUICulture
-            : !string.IsNullOrWhiteSpace(CultureInfo.CurrentCulture.Name)
-                ? CultureInfo.CurrentCulture
-                : CultureInfo.InstalledUICulture;
+        var preferredCulture = ResolvePreferredCulture(languageOverride);
 
         Culture = ResolveSupportedCulture(preferredCulture);
         LanguageTag = Culture.Name;
@@ -398,13 +473,46 @@ public sealed class LocalizationService
 
     public string TopicsTitle => Get("TopicsTitle");
     public string HistoryTitle => Get("HistoryTitle");
+    public string HistoryTopicsTitle => GetLocalizedString("HistoryTopicsTitle", "Conversas anteriores");
     public string UseButton => Get("UseButton");
     public string NewTopicButton => Get("NewTopicButton");
     public string RenameTopicButton => Get("RenameTopicButton");
     public string RenameTopicPlaceholder => Get("RenameTopicPlaceholder");
+    public string CloseButton => GetLocalizedString("CloseButton", "Fechar");
+    public string AccountTitle => GetLocalizedString("AccountTitle", "Conta");
+    public string AccountSubtitle => GetLocalizedString("AccountSubtitle", "Gerencie a conta do Codex usada por esta extensão.");
+    public string SignedInAsLabel => GetLocalizedString("SignedInAsLabel", "Conectado como");
+    public string NotSignedInLabel => GetLocalizedString("NotSignedInLabel", "Sem login");
+    public string LogOutAndLogInButton => GetLocalizedString("LogOutAndLogInButton", "Sair e fazer login novamente");
+    public string CodexSettingsNav => GetLocalizedString("CodexSettingsNav", "Configurações do Codex");
+    public string IdeSettingsNav => GetLocalizedString("IdeSettingsNav", "Configurações da IDE");
+    public string McpSettingsNav => GetLocalizedString("McpSettingsNav", "Configurações de MCP");
+    public string SkillsSettingsNav => GetLocalizedString("SkillsSettingsNav", "Configurações de skills");
+    public string LanguageNav => GetLocalizedString("LanguageNav", "Idioma");
+    public string HistoryNav => GetLocalizedString("HistoryNav", "Histórico");
+    public string LanguageTitle => GetLocalizedString("LanguageTitle", "Idioma");
+    public string LanguageSubtitle => GetLocalizedString("LanguageSubtitle", "Substitua a detecção automática de idioma da interface.");
+    public string LanguageAutoOption => GetLocalizedString("LanguageAutoOption", "Automático");
+    public string CurrentLanguageLabel => GetLocalizedString("CurrentLanguageLabel", "Idioma atual");
+    public string HistorySearchPlaceholder => GetLocalizedString("HistorySearchPlaceholder", "Procurar em tarefas recentes");
+    public string AllTasksLabel => GetLocalizedString("AllTasksLabel", "Todas as tarefas");
+    public string ViewAllTasksLabel => GetLocalizedString("ViewAllTasksLabel", "Ver todas");
+    public string TasksTitle => GetLocalizedString("TasksTitle", "Tarefas");
+    public string RecentTasksTitle => GetLocalizedString("RecentTasksTitle", "Tarefas recentes");
+    public string NoTasksDetected => GetLocalizedString("NoTasksDetected", "Nenhuma tarefa recente ainda.");
+    public string PersonalAccountLabel => GetLocalizedString("PersonalAccountLabel", "Conta pessoal");
+    public string OpenAgentSettingsLabel => GetLocalizedString("OpenAgentSettingsLabel", "Abrir configurações do agente");
+    public string ReadDocsLabel => GetLocalizedString("ReadDocsLabel", "Ler documentação");
+    public string OpenConfigTomlLabel => GetLocalizedString("OpenConfigTomlLabel", "Abrir config.toml");
+    public string SearchLanguagesPlaceholder => GetLocalizedString("SearchLanguagesPlaceholder", "Procurar idioma");
+    public string NoLanguagesFound => GetLocalizedString("NoLanguagesFound", "Nenhum idioma encontrado.");
+    public string KeyboardShortcutsLabel => GetLocalizedString("KeyboardShortcutsLabel", "Atalhos do teclado");
+    public string LogOutLabel => GetLocalizedString("LogOutLabel", "Sair");
+    public string NoTopicsAvailable => GetLocalizedString("NoTopicsAvailable", "Nenhuma conversa anterior ainda.");
     public string PlanModeLabel => Get("PlanModeLabel");
     public string QuestionModeLabel => Get("QuestionModeLabel");
     public string AgentModeLabel => Get("AgentModeLabel");
+    public string ReasoningEffortLabel => GetLocalizedString("ReasoningEffortLabel", "Esforço de raciocínio");
     public string AppsTitle => Get("AppsTitle");
     public string McpServersTitle => Get("McpServersTitle");
     public string DetectedSkillsTitle => GetLocalizedString("DetectedSkillsTitle", "Skills detectadas");
@@ -429,6 +537,28 @@ public sealed class LocalizationService
     public string ManagedMcpHint => GetLocalizedString("ManagedMcpHint", "Somente entradas válidas e habilitadas são aplicadas. Use apenas letras, números, '-' ou '_' no nome.");
     public string SkillsTitle => Get("SkillsTitle");
     public string SkillsDescription => GetLocalizedString("SkillsDescription", "Crie e abra skills globais no mesmo lugar em que você configura a integração do Codex.");
+    public string SkillsLearnMore => GetLocalizedString("SkillsLearnMore", "Dê superpoderes ao Codex.");
+    public string InstalledSkillsTitle => GetLocalizedString("InstalledSkillsTitle", "Instaladas");
+    public string RecommendedSkillsTitle => GetLocalizedString("RecommendedSkillsTitle", "Recomendadas");
+    public string SearchSkillsPlaceholder => GetLocalizedString("SearchSkillsPlaceholder", "Buscar skills");
+    public string InstallSkillButton => GetLocalizedString("InstallSkillButton", "Instalar");
+    public string NoRecommendedSkills => GetLocalizedString("NoRecommendedSkills", "Nenhuma skill recomendada disponível.");
+    public string IncludeIdeContextLabel => GetLocalizedString("IncludeIdeContextLabel", "Incluir contexto da IDE");
+    public string SpeedLabel => GetLocalizedString("SpeedLabel", "Velocidade");
+    public string AddPhotosFilesMenu => GetLocalizedString("AddPhotosFilesMenu", "Adicionar fotos e arquivos");
+    public string McpShortcutsTitle => GetLocalizedString("McpShortcutsTitle", "Atalhos MCP");
+    public string PermissionsTitle => GetLocalizedString("PermissionsTitle", "Permissões");
+    public string DefaultPermissionsLabel => GetLocalizedString("DefaultPermissionsLabel", "Permissões padrão");
+    public string ContextWindowTitle => GetLocalizedString("ContextWindowTitle", "Janela de contexto");
+    public string ContinueInTitle => GetLocalizedString("ContinueInTitle", "Continuar em");
+    public string LocalProjectLabel => GetLocalizedString("LocalProjectLabel", "Projeto local");
+    public string RateLimitsTitle => GetLocalizedString("RateLimitsTitle", "Rate limits restantes");
+    public string RateLimitsUnavailable => GetLocalizedString("RateLimitsUnavailable", "Rate limits indisponíveis.");
+    public string PlanLabelShort => GetLocalizedString("PlanLabelShort", "Plano");
+    public string PrimaryWindowLabel => GetLocalizedString("PrimaryWindowLabel", "Janela principal");
+    public string SecondaryWindowLabel => GetLocalizedString("SecondaryWindowLabel", "Janela secundária");
+    public string CreditsLabel => GetLocalizedString("CreditsLabel", "Créditos");
+    public string PreferredMcpTitle => GetLocalizedString("PreferredMcpTitle", "MCPs preferidos");
     public string SkillNameLabel => GetLocalizedString("SkillNameLabel", "Nome da skill");
     public string SkillDescriptionLabel => GetLocalizedString("SkillDescriptionLabel", "Descrição inicial");
     public string CreateSkillButton => GetLocalizedString("CreateSkillButton", "Criar skill");
@@ -437,6 +567,7 @@ public sealed class LocalizationService
     public string SkillOpenButton => GetLocalizedString("SkillOpenButton", "Abrir");
     public string RefreshStatusButton => GetLocalizedString("RefreshStatusButton", "Atualizar");
     public string EnabledLabel => GetLocalizedString("EnabledLabel", "Habilitado");
+    public string OpenPanelButton => GetLocalizedString("OpenPanelButton", "Abrir");
     public string NoSkillsDetected => GetLocalizedString("NoSkillsDetected", "Nenhuma skill detectada ainda.");
     public string NoManagedMcpServers => GetLocalizedString("NoManagedMcpServers", "Nenhum servidor MCP gerenciado foi configurado.");
     public string VerbosityLabel => Get("VerbosityLabel");
@@ -517,6 +648,16 @@ public sealed class LocalizationService
         };
     }
 
+    public SelectionOption[] CreateServiceTierOptions()
+    {
+        return new[]
+        {
+            new SelectionOption(GetLocalizedString("SpeedDefault", "Padrão"), string.Empty),
+            new SelectionOption(GetLocalizedString("SpeedFast", "Rápida"), "fast"),
+            new SelectionOption(GetLocalizedString("SpeedFlex", "Flex"), "flex")
+        };
+    }
+
     public SelectionOption[] CreateApprovalPolicyOptions()
     {
         return new[]
@@ -536,6 +677,19 @@ public sealed class LocalizationService
             new SelectionOption(Get("SandboxReadOnly"), "read-only"),
             new SelectionOption(Get("SandboxWorkspace"), "workspace-write"),
             new SelectionOption(Get("SandboxFullAccess"), "danger-full-access")
+        };
+    }
+
+    public SelectionOption[] CreateLanguageOptions()
+    {
+        return new[]
+        {
+            new SelectionOption(LanguageAutoOption, string.Empty),
+            new SelectionOption("Português (Brasil)", "pt-BR"),
+            new SelectionOption("English", "en"),
+            new SelectionOption("Español", "es"),
+            new SelectionOption("Français", "fr"),
+            new SelectionOption("Deutsch", "de")
         };
     }
 
@@ -569,6 +723,32 @@ public sealed class LocalizationService
         return Culture.TwoLetterISOLanguageName == "pt"
             ? portugueseValue
             : Get(key);
+    }
+
+    private static CultureInfo ResolvePreferredCulture(string? languageOverride)
+    {
+        if (!string.IsNullOrWhiteSpace(languageOverride))
+        {
+            try
+            {
+                return CultureInfo.GetCultureInfo(languageOverride.Trim());
+            }
+            catch (CultureNotFoundException)
+            {
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(CultureInfo.CurrentUICulture.Name))
+        {
+            return CultureInfo.CurrentUICulture;
+        }
+
+        if (!string.IsNullOrWhiteSpace(CultureInfo.CurrentCulture.Name))
+        {
+            return CultureInfo.CurrentCulture;
+        }
+
+        return CultureInfo.InstalledUICulture;
     }
 
     private static CultureInfo ResolveSupportedCulture(CultureInfo culture)

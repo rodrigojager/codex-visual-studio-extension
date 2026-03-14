@@ -40,6 +40,44 @@ public sealed class SolutionContextService
         return TryGetBestWorkspaceDirectory() ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
+    public string BuildIdeContextSummary(string workingDirectory)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        var sections = new List<string>();
+        var solutionDirectory = TryGetSolutionDirectory();
+        if (!string.IsNullOrWhiteSpace(solutionDirectory))
+        {
+            sections.Add("Solução: " + FormatPath(workingDirectory, solutionDirectory));
+        }
+
+        var activeDocument = TryGetActiveDocumentPath();
+        if (!string.IsNullOrWhiteSpace(activeDocument))
+        {
+            sections.Add("Documento ativo: " + FormatPath(workingDirectory, activeDocument));
+        }
+
+        var selectedItems = GetSelectedPaths(workingDirectory);
+        if (selectedItems.Count > 0)
+        {
+            sections.Add("Itens selecionados: " + string.Join(", ", selectedItems.Take(5)));
+        }
+
+        var openDocuments = GetOpenDocumentPaths(workingDirectory);
+        if (openDocuments.Count > 0)
+        {
+            sections.Add("Arquivos abertos: " + string.Join(", ", openDocuments.Take(6)));
+        }
+
+        var selectionSnippet = TryGetActiveSelectionSnippet();
+        if (!string.IsNullOrWhiteSpace(selectionSnippet))
+        {
+            sections.Add("Seleção ativa:" + Environment.NewLine + selectionSnippet);
+        }
+
+        return string.Join(Environment.NewLine, sections.Where(section => !string.IsNullOrWhiteSpace(section)));
+    }
+
     public IReadOnlyList<string> FindSolutionFiles(string search)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
@@ -111,6 +149,20 @@ public sealed class SolutionContextService
         System.Diagnostics.Process.Start(new ProcessStartInfo
         {
             FileName = path,
+            UseShellExecute = true
+        });
+    }
+
+    public void OpenUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return;
+        }
+
+        System.Diagnostics.Process.Start(new ProcessStartInfo
+        {
+            FileName = url,
             UseShellExecute = true
         });
     }
@@ -265,6 +317,24 @@ public sealed class SolutionContextService
         return null;
     }
 
+    private static string? TryGetActiveDocumentPath()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        try
+        {
+            var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
+            var fullName = dte?.ActiveDocument?.FullName;
+            return !string.IsNullOrWhiteSpace(fullName) && File.Exists(fullName)
+                ? fullName
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string? TryGetProjectDirectory(Project? project)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
@@ -333,6 +403,105 @@ public sealed class SolutionContextService
     {
         var relative = file.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return relative.Replace('\\', '/');
+    }
+
+    private static string FormatPath(string root, string path)
+    {
+        if (!string.IsNullOrWhiteSpace(root)
+            && path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            return MakeRelative(root, path);
+        }
+
+        return path.Replace('\\', '/');
+    }
+
+    private static IReadOnlyList<string> GetOpenDocumentPaths(string workingDirectory)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        try
+        {
+            var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
+            if (dte?.Documents is null)
+            {
+                return Array.Empty<string>();
+            }
+
+            return dte.Documents
+                .Cast<Document>()
+                .Select(document => document.FullName)
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Select(path => FormatPath(workingDirectory, path!))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static IReadOnlyList<string> GetSelectedPaths(string workingDirectory)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        try
+        {
+            var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
+            if (dte?.SelectedItems is null)
+            {
+                return Array.Empty<string>();
+            }
+
+            var items = new List<string>();
+            foreach (SelectedItem selectedItem in dte.SelectedItems)
+            {
+                var path = selectedItem.ProjectItem?.FileNames[1]
+                    ?? selectedItem.Project?.FullName;
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                items.Add(FormatPath(workingDirectory, path));
+            }
+
+            return items.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static string TryGetActiveSelectionSnippet()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        try
+        {
+            var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
+            var textSelection = dte?.ActiveDocument?.Selection as TextSelection;
+            var selectedText = textSelection?.Text;
+            if (string.IsNullOrWhiteSpace(selectedText))
+            {
+                return string.Empty;
+            }
+
+            var normalized = selectedText.Replace("\r\n", "\n").Trim();
+            const int maxLength = 900;
+            if (normalized.Length <= maxLength)
+            {
+                return normalized;
+            }
+
+            return normalized.Substring(0, maxLength).TrimEnd() + Environment.NewLine + "...";
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     private static int Score(string file, string search)

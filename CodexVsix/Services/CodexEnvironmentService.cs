@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CodexVsix.Models;
@@ -45,6 +47,7 @@ public sealed class CodexEnvironmentService
             status.Version = version.Detail;
             status.HasApiKey = HasApiKey(settings.EnvironmentVariables) || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
             status.HasAuthFile = HasUsableAuthFile(status.AuthFilePath);
+            status.AccountEmail = status.HasAuthFile ? TryReadAccountEmail(status.AuthFilePath) : string.Empty;
 
             status.Stage = status.HasApiKey || status.HasAuthFile
                 ? CodexSetupStage.Ready
@@ -90,6 +93,20 @@ public sealed class CodexEnvironmentService
             Arguments = "login",
             UseShellExecute = true
         });
+    }
+
+    public void DeleteAuthFile(string? authFilePath = null)
+    {
+        var path = string.IsNullOrWhiteSpace(authFilePath)
+            ? GetAuthFilePath()
+            : authFilePath!;
+
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        File.Delete(path);
     }
 
     public string GetAuthFilePath()
@@ -267,6 +284,65 @@ public sealed class CodexEnvironmentService
         }
 
         return false;
+    }
+
+    private static string TryReadAccountEmail(string authFilePath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(authFilePath) || !File.Exists(authFilePath))
+            {
+                return string.Empty;
+            }
+
+            var document = JObject.Parse(File.ReadAllText(authFilePath));
+            var tokens = document["tokens"] as JObject;
+            var idToken = tokens?["id_token"]?.ToString();
+            if (string.IsNullOrWhiteSpace(idToken))
+            {
+                return string.Empty;
+            }
+
+            var payload = ParseJwtPayload(idToken);
+            return FirstNonEmptyString(
+                payload.TryGetValue("email", out var email) ? email?.ToString() : null,
+                payload.TryGetValue("preferred_username", out var preferredUsername) ? preferredUsername?.ToString() : null,
+                tokens?["account_id"]?.ToString());
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static JObject ParseJwtPayload(string token)
+    {
+        var parts = token.Split('.');
+        if (parts.Length < 2 || string.IsNullOrWhiteSpace(parts[1]))
+        {
+            return new JObject();
+        }
+
+        var payloadBytes = DecodeBase64Url(parts[1]);
+        var payloadJson = Encoding.UTF8.GetString(payloadBytes);
+        return JObject.Parse(payloadJson);
+    }
+
+    private static byte[] DecodeBase64Url(string value)
+    {
+        var normalized = value.Replace('-', '+').Replace('_', '/');
+        var padding = 4 - (normalized.Length % 4);
+        if (padding is > 0 and < 4)
+        {
+            normalized = normalized.PadRight(normalized.Length + padding, '=');
+        }
+
+        return Convert.FromBase64String(normalized);
+    }
+
+    private static string FirstNonEmptyString(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     }
 
     private static bool HasUsableAuthFile(string authFilePath)
