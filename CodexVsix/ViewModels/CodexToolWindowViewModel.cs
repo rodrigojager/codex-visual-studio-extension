@@ -909,7 +909,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             _selectedThread = value;
             RenameThreadName = value?.Title ?? string.Empty;
             OnPropertyChanged();
-            RenameThreadCommand.RaiseCanExecuteChanged();
+            RenameThreadCommand?.RaiseCanExecuteChanged();
 
             if (!_suppressThreadSelection && value is not null)
             {
@@ -925,7 +925,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             _renameThreadName = value;
             OnPropertyChanged();
-            RenameThreadCommand.RaiseCanExecuteChanged();
+            RenameThreadCommand?.RaiseCanExecuteChanged();
         }
     }
 
