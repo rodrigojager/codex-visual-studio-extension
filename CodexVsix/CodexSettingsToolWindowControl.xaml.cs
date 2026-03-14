@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using CodexVsix.ViewModels;
+using Microsoft.VisualStudio.Shell;
 
 namespace CodexVsix;
 
@@ -11,8 +12,26 @@ public partial class CodexSettingsToolWindowControl : UserControl
 
     public CodexSettingsToolWindowControl()
     {
-        InitializeComponent();
-        _viewModel = CodexViewModelHost.GetOrCreate();
+        try
+        {
+            InitializeComponent();
+        }
+        catch (System.Exception ex)
+        {
+            ActivityLog.TryLogError("CodexVsix", "Falha ao carregar o XAML da janela de configuracoes do Codex." + System.Environment.NewLine + ex);
+            throw;
+        }
+
+        try
+        {
+            _viewModel = CodexViewModelHost.GetOrCreate();
+        }
+        catch (System.Exception ex)
+        {
+            ActivityLog.TryLogError("CodexVsix", "Falha ao criar o view model da janela de configuracoes do Codex." + System.Environment.NewLine + ex);
+            throw;
+        }
+
         DataContext = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Unloaded += OnUnloaded;

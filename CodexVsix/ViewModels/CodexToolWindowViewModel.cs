@@ -75,6 +75,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         Settings = _settingsStore.Load();
+        EnsureSettingsCollectionsInitialized();
         _localization = new LocalizationService(Settings.LanguageOverride);
 
         if (string.IsNullOrWhiteSpace(Settings.DefaultModel)) Settings.DefaultModel = "gpt-5.4";
@@ -827,20 +828,20 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public IEnumerable<CodexSkillSummary> VisibleSkills => Skills.Where(skill =>
         string.IsNullOrWhiteSpace(SkillSearchText)
-        || skill.DisplayTitle.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
-        || skill.Name.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
-        || skill.Summary.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0);
+        || (skill.DisplayTitle ?? string.Empty).IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || (skill.Name ?? string.Empty).IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || (skill.Summary ?? string.Empty).IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0);
 
     public IEnumerable<CodexRemoteSkillSummary> VisibleRemoteSkills => RemoteSkills.Where(skill =>
         string.IsNullOrWhiteSpace(SkillSearchText)
-        || skill.Name.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
-        || skill.Description.IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0);
+        || (skill.Name ?? string.Empty).IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || (skill.Description ?? string.Empty).IndexOf(SkillSearchText, StringComparison.OrdinalIgnoreCase) >= 0);
 
     public IEnumerable<CodexThreadSummary> VisibleThreads => Threads.Where(thread =>
         string.IsNullOrWhiteSpace(HistorySearchText)
-        || thread.Title.IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0
-        || thread.Subtitle.IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0
-        || thread.Preview.IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0);
+        || (thread.Title ?? string.Empty).IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || (thread.Subtitle ?? string.Empty).IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0
+        || (thread.Preview ?? string.Empty).IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0);
 
     public IEnumerable<CodexThreadSummary> RecentThreadsPreview => Threads.Take(3);
 
@@ -863,9 +864,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public bool HasRateLimitData => RateLimitSummary.HasAnyData;
 
-    public bool HasPreferredMcpServers => Settings.PreferredMcpServers.Count > 0;
+    public bool HasPreferredMcpServers => (Settings.PreferredMcpServers?.Count ?? 0) > 0;
 
-    public IEnumerable<string> PreferredMcpServers => Settings.PreferredMcpServers;
+    public IEnumerable<string> PreferredMcpServers => Settings.PreferredMcpServers ?? Enumerable.Empty<string>();
 
     public bool HasThreads => Threads.Count > 0;
 
@@ -1304,6 +1305,28 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         Settings.ServiceTier = EnsureOptionValue(Settings.ServiceTier, ServiceTierOptions, string.Empty);
         Settings.SandboxMode = EnsureOptionValue(Settings.SandboxMode, SandboxModeOptions, "read-only");
         Settings.ApprovalPolicy = EnsureOptionValue(Settings.ApprovalPolicy, ApprovalPolicyOptions, string.Empty);
+    }
+
+    private void EnsureSettingsCollectionsInitialized()
+    {
+        Settings.PromptHistory ??= new List<string>();
+        Settings.ManagedMcpServers ??= new List<CodexManagedMcpServer>();
+        Settings.PreferredMcpServers ??= new List<string>();
+
+        Settings.PromptHistory = Settings.PromptHistory
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Trim())
+            .ToList();
+
+        Settings.ManagedMcpServers = Settings.ManagedMcpServers
+            .Where(server => server is not null)
+            .ToList();
+
+        Settings.PreferredMcpServers = Settings.PreferredMcpServers
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static string EnsureOptionValue(string? currentValue, IEnumerable<SelectionOption> options, string fallbackValue)
@@ -2405,7 +2428,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void SyncMcpShortcutSelections()
     {
-        var selectedServers = new HashSet<string>(Settings.PreferredMcpServers, StringComparer.OrdinalIgnoreCase);
+        var selectedServers = new HashSet<string>(Settings.PreferredMcpServers ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         foreach (var server in McpServers)
         {
             server.IsShortcutSelected = selectedServers.Contains(server.Name);
@@ -2458,7 +2481,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
         var availableSkillNames = new HashSet<string>(
             Skills.Where(skill => skill.IsEnabled && !string.IsNullOrWhiteSpace(skill.Name))
-                .Select(skill => skill.Name),
+                .Select(skill => skill.Name!),
             StringComparer.OrdinalIgnoreCase);
 
         var formattedPrompt = FormatPromptSkillDisplay(message.Text, availableSkillNames);
@@ -2520,8 +2543,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private System.Collections.Generic.IEnumerable<string> GetRecentPromptHistory()
     {
-        var skip = Math.Max(0, Settings.PromptHistory.Count - 30);
-        return Settings.PromptHistory.Skip(skip).Reverse();
+        var promptHistory = Settings.PromptHistory ?? new List<string>();
+        var skip = Math.Max(0, promptHistory.Count - 30);
+        return promptHistory.Skip(skip).Reverse();
     }
 
     private void AddUserMessage(string text)
@@ -2708,7 +2732,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         return Skills
             .Where(skill => skill.IsEnabled && !string.IsNullOrWhiteSpace(skill.Name))
-            .ToDictionary(skill => skill.Name, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(skill => skill.Name!, StringComparer.OrdinalIgnoreCase);
     }
 
     private void SyncDetectedPromptSkills(IEnumerable<string> skillNames, IReadOnlyDictionary<string, CodexSkillSummary> availableSkills)

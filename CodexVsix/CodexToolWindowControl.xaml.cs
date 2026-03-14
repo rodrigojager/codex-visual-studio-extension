@@ -12,6 +12,7 @@ using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using CodexVsix.Models;
 using CodexVsix.ViewModels;
+using Microsoft.VisualStudio.Shell;
 
 namespace CodexVsix;
 
@@ -25,8 +26,26 @@ public partial class CodexToolWindowControl : UserControl
 
     public CodexToolWindowControl()
     {
-        InitializeComponent();
-        _viewModel = CodexViewModelHost.GetOrCreate();
+        try
+        {
+            InitializeComponent();
+        }
+        catch (Exception ex)
+        {
+            ActivityLog.TryLogError("CodexVsix", "Falha ao carregar o XAML da janela do Codex." + Environment.NewLine + ex);
+            throw;
+        }
+
+        try
+        {
+            _viewModel = CodexViewModelHost.GetOrCreate();
+        }
+        catch (Exception ex)
+        {
+            ActivityLog.TryLogError("CodexVsix", "Falha ao criar o view model da janela do Codex." + Environment.NewLine + ex);
+            throw;
+        }
+
         DataContext = _viewModel;
         _viewModel.Messages.CollectionChanged += OnMessagesCollectionChanged;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
