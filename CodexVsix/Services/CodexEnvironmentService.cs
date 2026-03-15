@@ -17,6 +17,7 @@ public sealed class CodexEnvironmentService
 
     public async Task<CodexEnvironmentStatus> InspectAsync(CodexExtensionSettings settings, CancellationToken cancellationToken)
     {
+        var localization = new LocalizationService(settings.LanguageOverride);
         var configuredExecutablePath = ResolveConfiguredExecutablePath(settings.CodexExecutablePath);
         var status = new CodexEnvironmentStatus
         {
@@ -36,7 +37,7 @@ public sealed class CodexEnvironmentService
 
             status.ResolvedExecutablePath = resolvedExecutablePath;
 
-            var version = await TryGetVersionAsync(resolvedExecutablePath, cancellationToken).ConfigureAwait(false);
+            var version = await TryGetVersionAsync(resolvedExecutablePath, localization, cancellationToken).ConfigureAwait(false);
             if (!version.Success)
             {
                 status.Stage = CodexSetupStage.Error;
@@ -193,7 +194,7 @@ public sealed class CodexEnvironmentService
         };
     }
 
-    private static async Task<(bool Success, string Detail)> TryGetVersionAsync(string executablePath, CancellationToken cancellationToken)
+    private static async Task<(bool Success, string Detail)> TryGetVersionAsync(string executablePath, LocalizationService localization, CancellationToken cancellationToken)
     {
         using var process = new Process
         {
@@ -212,7 +213,7 @@ public sealed class CodexEnvironmentService
         {
             if (!process.Start())
             {
-                return (false, "Não foi possível iniciar o Codex CLI.");
+                return (false, localization.SetupMissingExecutableSummary);
             }
         }
         catch (Exception ex)
@@ -227,7 +228,7 @@ public sealed class CodexEnvironmentService
         if (!exited)
         {
             TryTerminateProcess(process);
-            return (false, "O Codex CLI demorou demais para responder ao comando de versão.");
+            return (false, localization.SetupErrorSummary);
         }
 
         var output = await outputTask.ConfigureAwait(false);
@@ -236,11 +237,11 @@ public sealed class CodexEnvironmentService
         if (process.ExitCode != 0)
         {
             var error = string.IsNullOrWhiteSpace(errorText) ? output : errorText;
-            return (false, string.IsNullOrWhiteSpace(error) ? "Não foi possível obter a versão do Codex." : error.Trim());
+            return (false, string.IsNullOrWhiteSpace(error) ? localization.SetupErrorSummary : error.Trim());
         }
 
         var versionText = FirstNonEmptyLine(output);
-        return (true, string.IsNullOrWhiteSpace(versionText) ? "Codex detectado" : versionText);
+        return (true, string.IsNullOrWhiteSpace(versionText) ? localization.CodexDetectedLabel : versionText);
     }
 
     private static async Task<bool> WaitForExitAsync(Process process, int timeoutMilliseconds, CancellationToken cancellationToken)

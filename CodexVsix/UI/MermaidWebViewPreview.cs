@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using CodexVsix.Services;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
@@ -30,6 +31,7 @@ internal sealed class MermaidWebViewPreview : Grid
     private readonly Border _statusHost;
     private readonly TextBlock _statusText;
     private readonly DispatcherTimer _bootstrapTimer;
+    private readonly LocalizationService _localization;
     private bool _isInitialized;
     private bool _snapshotRequested;
     private bool _isDisposed;
@@ -39,6 +41,7 @@ internal sealed class MermaidWebViewPreview : Grid
     public MermaidWebViewPreview(string code)
     {
         _code = code ?? string.Empty;
+        _localization = new LocalizationService();
         Height = 180;
         MinHeight = 120;
         Margin = new Thickness(0, 2, 0, 0);
@@ -66,7 +69,7 @@ internal sealed class MermaidWebViewPreview : Grid
 
         _statusText = new TextBlock
         {
-            Text = "Carregando preview Mermaid...",
+            Text = _localization.MermaidLoadingPreview,
             Foreground = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255)),
             TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center
@@ -154,7 +157,7 @@ internal sealed class MermaidWebViewPreview : Grid
         catch (Exception ex)
         {
             Trace.WriteLine(ex);
-            Fail("Não foi possível iniciar o Mermaid oficial nesta máquina.");
+            Fail(_localization.MermaidInitFailed);
         }
     }
 
@@ -165,7 +168,7 @@ internal sealed class MermaidWebViewPreview : Grid
             return;
         }
 
-        Fail($"Não foi possível carregar a view Mermaid oficial: {e.WebErrorStatus}.");
+        Fail(string.Format(CultureInfo.CurrentUICulture, _localization.MermaidLoadFailedFormat, e.WebErrorStatus));
     }
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -199,8 +202,8 @@ internal sealed class MermaidWebViewPreview : Grid
         {
             var detail = message.Substring("error:".Length).Trim();
             Fail(string.IsNullOrWhiteSpace(detail)
-                ? "Não foi possível renderizar o Mermaid oficial."
-                : $"Não foi possível renderizar o Mermaid oficial: {detail}");
+                ? _localization.MermaidRenderFailed
+                : string.Format(CultureInfo.CurrentUICulture, _localization.MermaidRenderFailedFormat, detail));
         }
     }
 
@@ -252,7 +255,7 @@ internal sealed class MermaidWebViewPreview : Grid
             }
 
             Trace.WriteLine(ex);
-            Fail("Não foi possível congelar a visualização do Mermaid oficial.");
+            Fail(_localization.MermaidFreezeFailed);
         }
     }
 
@@ -282,7 +285,7 @@ internal sealed class MermaidWebViewPreview : Grid
             return;
         }
 
-        Fail("Não foi possível concluir o carregamento do Mermaid.");
+        Fail(_localization.MermaidLoadTimeout);
     }
 
     private void ResetBootstrapTimer()
@@ -519,7 +522,7 @@ internal sealed class MermaidWebViewPreview : Grid
     }
 
     window.addEventListener('error', (event) => {
-      const detail = event?.error?.message || event?.message || 'Erro ao carregar o preview Mermaid.';
+      const detail = event?.error?.message || event?.message || '__MERMAID_SCRIPT_ERROR__';
       fail(detail);
     });
     window.addEventListener('resize', () => scheduleHeightSync(1200));
@@ -581,7 +584,7 @@ internal sealed class MermaidWebViewPreview : Grid
         scheduleHeightSync(2000);
         postMessage('ready');
       } catch (error) {
-        const detail = error?.message || 'Não foi possível renderizar o Mermaid oficial.';
+        const detail = error?.message || '__MERMAID_RENDER_FAILED__';
         fail(detail);
       }
     })();
@@ -590,7 +593,10 @@ internal sealed class MermaidWebViewPreview : Grid
 </html>
 """;
 
-        return htmlTemplate.Replace("__BOOTSTRAP_TIMEOUT_MS__", MermaidBootstrapTimeoutMs.ToString(CultureInfo.InvariantCulture));
+        return htmlTemplate
+            .Replace("__BOOTSTRAP_TIMEOUT_MS__", MermaidBootstrapTimeoutMs.ToString(CultureInfo.InvariantCulture))
+            .Replace("__MERMAID_SCRIPT_ERROR__", new LocalizationService().MermaidPreviewScriptError)
+            .Replace("__MERMAID_RENDER_FAILED__", new LocalizationService().MermaidRenderFailed);
     }
 
     private static string EnsureLocalAssets()

@@ -43,36 +43,37 @@ public sealed class SolutionContextService
     public string BuildIdeContextSummary(string workingDirectory)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
+        var localization = new LocalizationService();
 
         var sections = new List<string>();
         var solutionDirectory = TryGetSolutionDirectory();
         if (!string.IsNullOrWhiteSpace(solutionDirectory))
         {
-            sections.Add("Solução: " + FormatPath(workingDirectory, solutionDirectory));
+            sections.Add(localization.IdeContextSolutionLabel + " " + FormatPath(workingDirectory, solutionDirectory));
         }
 
         var activeDocument = TryGetActiveDocumentPath();
         if (!string.IsNullOrWhiteSpace(activeDocument))
         {
-            sections.Add("Documento ativo: " + FormatPath(workingDirectory, activeDocument));
+            sections.Add(localization.IdeContextActiveDocumentLabel + " " + FormatPath(workingDirectory, activeDocument));
         }
 
         var selectedItems = GetSelectedPaths(workingDirectory);
         if (selectedItems.Count > 0)
         {
-            sections.Add("Itens selecionados: " + string.Join(", ", selectedItems.Take(5)));
+            sections.Add(localization.IdeContextSelectedItemsLabel + " " + string.Join(", ", selectedItems.Take(5)));
         }
 
         var openDocuments = GetOpenDocumentPaths(workingDirectory);
         if (openDocuments.Count > 0)
         {
-            sections.Add("Arquivos abertos: " + string.Join(", ", openDocuments.Take(6)));
+            sections.Add(localization.IdeContextOpenFilesLabel + " " + string.Join(", ", openDocuments.Take(6)));
         }
 
         var selectionSnippet = TryGetActiveSelectionSnippet();
         if (!string.IsNullOrWhiteSpace(selectionSnippet))
         {
-            sections.Add("Seleção ativa:" + Environment.NewLine + selectionSnippet);
+            sections.Add(localization.IdeContextSelectionLabel + Environment.NewLine + selectionSnippet);
         }
 
         return string.Join(Environment.NewLine, sections.Where(section => !string.IsNullOrWhiteSpace(section)));
@@ -206,7 +207,7 @@ public sealed class SolutionContextService
         var trimmed = (skillName ?? string.Empty).Trim();
         if (!IsValidSkillName(trimmed))
         {
-            throw new ArgumentException("Nome de skill inválido.", nameof(skillName));
+            throw new ArgumentException(new LocalizationService().InvalidSkillNameMessage, nameof(skillName));
         }
 
         return trimmed;
@@ -214,21 +215,22 @@ public sealed class SolutionContextService
 
     private static string BuildSkillTemplate(string skillName, string description)
     {
+        var localization = new LocalizationService();
         var summary = string.IsNullOrWhiteSpace(description)
-            ? "Descreva aqui quando usar esta skill e qual problema ela resolve."
+            ? localization.SkillTemplateSummary
             : description.Trim();
 
         return "# " + skillName + Environment.NewLine
             + Environment.NewLine
             + summary + Environment.NewLine
             + Environment.NewLine
-            + "## Quando usar" + Environment.NewLine
-            + "- Explique em quais pedidos essa skill deve ser acionada." + Environment.NewLine
+            + localization.SkillTemplateWhenToUseHeading + Environment.NewLine
+            + localization.SkillTemplateWhenToUseBullet + Environment.NewLine
             + Environment.NewLine
-            + "## Fluxo" + Environment.NewLine
-            + "1. Descreva o passo inicial." + Environment.NewLine
-            + "2. Liste as validações ou cuidados." + Environment.NewLine
-            + "3. Finalize com o resultado esperado." + Environment.NewLine;
+            + localization.SkillTemplateFlowHeading + Environment.NewLine
+            + localization.SkillTemplateFlowStep1 + Environment.NewLine
+            + localization.SkillTemplateFlowStep2 + Environment.NewLine
+            + localization.SkillTemplateFlowStep3 + Environment.NewLine;
     }
 
     private static bool IsIgnoredPath(string fullPath)

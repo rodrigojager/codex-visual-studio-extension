@@ -3,7 +3,7 @@
   <Identifier Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61">
     <Name>Codex for Visual Studio 2026</Name>
     <Author>Rodrigo Jager</Author>
-    <Version>1.1.6</Version>
+    <Version>1.1.7</Version>
     <Description xml:space="preserve">Abre um painel lateral no Visual Studio 2026 para interagir com o Codex.</Description>
     <Locale>pt-BR</Locale>
   </Identifier>

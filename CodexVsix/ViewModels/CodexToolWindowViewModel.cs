@@ -811,7 +811,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public string ContextWindowDetail => string.Format(
         CultureInfo.CurrentUICulture,
-        "{0} used ({1} left)",
+        _localization.ContextWindowDetailFormat,
         FormatPercent(Math.Max(0d, (_contextTokenBudget - _lastKnownRemainingTokens) / _contextTokenBudget)),
         FormatPercent(Math.Max(0d, _lastKnownRemainingTokens / _contextTokenBudget)));
 
@@ -1151,7 +1151,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             if (IsConversationStateCurrent(conversationStateVersion))
             {
                 AddAssistantMessage(_localization.ExecutionCanceled);
-                AppendOutput($"{Environment.NewLine}[cancelado]{Environment.NewLine}");
+                AppendOutput($"{Environment.NewLine}[{_localization.ExecutionCanceledTag}]{Environment.NewLine}");
             }
         }
         catch (Exception ex)
@@ -1159,7 +1159,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             if (IsConversationStateCurrent(conversationStateVersion))
             {
                 AddAssistantMessage(_localization.ExecutionError + " " + ex.Message);
-                AppendOutput($"{Environment.NewLine}[erro] {ex.Message}{Environment.NewLine}");
+                AppendOutput($"{Environment.NewLine}[{_localization.ExecutionErrorTag}] {ex.Message}{Environment.NewLine}");
             }
         }
         finally
@@ -1237,7 +1237,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         var summary = _solutionContextService.BuildIdeContextSummary(Settings.WorkingDirectory);
         return string.IsNullOrWhiteSpace(summary)
             ? string.Empty
-            : "Contexto atual da IDE:" + Environment.NewLine + summary;
+            : _localization.IdeContextPrefix + Environment.NewLine + summary;
     }
 
     private void SaveSettings()
@@ -1592,6 +1592,10 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private void ApplyLocalization(string? languageOverride)
     {
         _localization = new LocalizationService(languageOverride);
+        CultureInfo.CurrentUICulture = _localization.Culture;
+        CultureInfo.CurrentCulture = _localization.Culture;
+        CultureInfo.DefaultThreadCurrentUICulture = _localization.Culture;
+        CultureInfo.DefaultThreadCurrentCulture = _localization.Culture;
         CodexToolWindowManager.RefreshSettingsToolWindowCaption(_localization);
         OnPropertyChanged(nameof(Localization));
         OnPropertyChanged(nameof(ReasoningOptions));
@@ -2108,7 +2112,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
         catch (Exception ex)
         {
-            ActivityLog.TryLogError("CodexVsix", "Falha durante a inicialização assíncrona do painel do Codex." + Environment.NewLine + ex);
+            ActivityLog.TryLogError("CodexVsix", _localization.AsyncPanelInitializeLogMessage + Environment.NewLine + ex);
             AppendOutput("[init] " + ex.Message + Environment.NewLine);
             CodexEnvironmentStatus = new CodexEnvironmentStatus
             {

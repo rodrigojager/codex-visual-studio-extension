@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using CodexVsix.Services;
 using Microsoft.VisualStudio.Shell;
 
 namespace CodexVsix;
@@ -18,13 +19,14 @@ public sealed class CodexToolWindow : ToolWindowPane
         }
         catch (Exception ex)
         {
-            ActivityLog.TryLogError("CodexVsix", "Falha ao inicializar o conteúdo da janela do Codex." + Environment.NewLine + ex);
+            ActivityLog.TryLogError("CodexVsix", new LocalizationService().ToolWindowInitializeLogMessage + Environment.NewLine + ex);
             Content = CreateErrorView(ex);
         }
     }
 
     private static FrameworkElement CreateErrorView(Exception ex)
     {
+        var localization = new LocalizationService();
         return new Border
         {
             Padding = new Thickness(16),
@@ -34,7 +36,7 @@ public sealed class CodexToolWindow : ToolWindowPane
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 Content = new TextBlock
                 {
-                    Text = "A janela do Codex encontrou um erro durante a inicialização."
+                    Text = localization.ToolWindowErrorMessage
                         + Environment.NewLine
                         + Environment.NewLine
                         + ex.Message,

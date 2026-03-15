@@ -763,7 +763,7 @@
                                             Height="24"
                                             Padding="0"
                                             Style="{StaticResource IconButtonStyle}"
-                                            ToolTip="Fechar"
+                                            ToolTip="{Binding Localization.CloseButton}"
                                             Command="{Binding CloseSidebarCommand}">
                                         <Viewbox Width="10" Height="10">
                                             <Path Data="{StaticResource CloseIcon}"
@@ -823,7 +823,7 @@
                                                     HorizontalAlignment="Right"
                                                     VerticalAlignment="Top"
                                                     Style="{StaticResource IconButtonStyle}"
-                                                    ToolTip="Excluir do histórico"
+                                                    ToolTip="{Binding DataContext.Localization.DeleteHistoryTooltip, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}">
                                                 <Viewbox Width="9" Height="9">
@@ -1782,7 +1782,7 @@
                                         Height="26"
                                         Padding="0"
                                         Style="{StaticResource IconButtonStyle}"
-                                        ToolTip="Fechar"
+                                        ToolTip="{Binding Localization.CloseButton}"
                                         Command="{Binding DismissRecentTasksPreviewCommand}">
                                     <Viewbox Width="10" Height="10">
                                         <Path Data="{StaticResource CloseIcon}"
@@ -1845,7 +1845,7 @@
                                                     Margin="6,0,0,0"
                                                     Padding="0"
                                                     Style="{StaticResource IconButtonStyle}"
-                                                    ToolTip="Excluir do histórico"
+                                                    ToolTip="{Binding DataContext.Localization.DeleteHistoryTooltip, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}">
                                                 <Viewbox Width="9" Height="9">
@@ -2761,7 +2761,7 @@
                                                     Height="28"
                                                     Padding="0"
                                                     Style="{StaticResource IconButtonStyle}"
-                                                    ToolTip="Fechar"
+                                                    ToolTip="{Binding Localization.CloseButton}"
                                                     Command="{Binding CloseSidebarCommand}">
                                                 <Viewbox Width="10" Height="10">
                                                     <Path Data="{StaticResource CloseIcon}"
@@ -2827,7 +2827,7 @@
                                                             HorizontalAlignment="Right"
                                                             VerticalAlignment="Top"
                                                             Style="{StaticResource IconButtonStyle}"
-                                                            ToolTip="Excluir do histórico"
+                                                            ToolTip="{Binding DataContext.Localization.DeleteHistoryTooltip, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}">
                                                         <Viewbox Width="9" Height="9">

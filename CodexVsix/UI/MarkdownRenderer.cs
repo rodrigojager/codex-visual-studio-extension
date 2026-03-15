@@ -10,12 +10,14 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using CodexVsix.Services;
 
 namespace CodexVsix.UI;
 
 internal static class MarkdownRenderer
 {
     private const string CopyIconPathData = "M384 336l0-208c0-35.3-28.7-64-64-64l-224 0c-35.3 0-64 28.7-64 64l0 208c0 35.3 28.7 64 64 64l224 0c35.3 0 64-28.7 64-64zM96 80l224 0c26.5 0 48 21.5 48 48l0 208c0 26.5-21.5 48-48 48l-224 0c-26.5 0-48-21.5-48-48l0-208c0-26.5 21.5-48 48-48zM448 96l0 208c0 44.2-35.8 80-80 80l-32 0 0-16 32 0c35.3 0 64-28.7 64-64l0-208c0-35.3-28.7-64-64-64l-224 0 0-16 224 0c44.2 0 80 35.8 80 80z";
+    private static LocalizationService Localization => new();
     private static readonly Regex HeadingRegex = new(@"^(#{1,6})\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex BulletRegex = new(@"^\s*[-*+]\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex OrderedRegex = new(@"^\s*\d+\.\s+(.*)$", RegexOptions.Compiled);
@@ -362,7 +364,7 @@ internal static class MarkdownRenderer
             actionsHost.Children.Add(leadingControl);
         }
 
-        var copyButton = CreateIconButton(CopyIconPathData, "Copiar");
+        var copyButton = CreateIconButton(CopyIconPathData, Localization.CopyButton);
         copyButton.Click += (_, _) => Clipboard.SetText(contentToCopy ?? string.Empty);
         actionsHost.Children.Add(copyButton);
 
@@ -377,7 +379,7 @@ internal static class MarkdownRenderer
     {
         var stateLabel = new TextBlock
         {
-            Text = "Diagrama",
+            Text = Localization.MermaidDiagramLabel,
             Foreground = Brushes.White,
             Margin = new Thickness(0, 0, 8, 0),
             VerticalAlignment = VerticalAlignment.Center,
@@ -451,14 +453,14 @@ internal static class MarkdownRenderer
 
         toggle.Checked += (_, _) =>
         {
-            stateLabel.Text = "Diagrama";
+            stateLabel.Text = Localization.MermaidDiagramLabel;
             preview.Visibility = Visibility.Visible;
             codeView.Visibility = Visibility.Collapsed;
         };
 
         toggle.Unchecked += (_, _) =>
         {
-            stateLabel.Text = "Código";
+            stateLabel.Text = Localization.MermaidCodeLabel;
             preview.Visibility = Visibility.Collapsed;
             codeView.Visibility = Visibility.Visible;
         };
@@ -721,13 +723,12 @@ internal static class MarkdownRenderer
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = new SolidColorBrush(Color.FromArgb(210, 255, 255, 255))
             };
-            fallbackText.Text = "Não foi possível montar a prévia deste Mermaid. Use o toggle para alternar entre diagrama e código.";
-            fallbackText.Text = "\u004e\u00e3o foi poss\u00edvel montar a pr\u00e9via deste Mermaid. Use o toggle para alternar entre diagrama e c\u00f3digo.";
+            fallbackText.Text = Localization.MermaidPreviewFallback;
             return fallbackText;
 
             return new TextBlock
             {
-                Text = "Não foi possível montar a prévia deste Mermaid. Use o toggle para alternar entre diagrama e código.",
+                Text = Localization.MermaidPreviewFallback,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = new SolidColorBrush(Color.FromArgb(210, 255, 255, 255))
             };
@@ -2159,7 +2160,7 @@ internal static class MarkdownRenderer
         var normalized = (language ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(normalized))
         {
-            return "Código";
+            return Localization.MermaidCodeLabel;
         }
 
         return normalized.ToLowerInvariant() switch

@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using CodexVsix.Models;
+using CodexVsix.Services;
 using CodexVsix.ViewModels;
 using Microsoft.VisualStudio.Shell;
 
@@ -32,7 +33,7 @@ public partial class CodexToolWindowControl : UserControl
         }
         catch (Exception ex)
         {
-            ActivityLog.TryLogError("CodexVsix", "Falha ao carregar o XAML da janela do Codex." + Environment.NewLine + ex);
+            ActivityLog.TryLogError("CodexVsix", new LocalizationService().ToolWindowXamlLoadLogMessage + Environment.NewLine + ex);
             throw;
         }
 
@@ -42,7 +43,7 @@ public partial class CodexToolWindowControl : UserControl
         }
         catch (Exception ex)
         {
-            ActivityLog.TryLogError("CodexVsix", "Falha ao criar o view model da janela do Codex." + Environment.NewLine + ex);
+            ActivityLog.TryLogError("CodexVsix", new LocalizationService().ToolWindowViewModelCreateLogMessage + Environment.NewLine + ex);
             throw;
         }
 
@@ -451,11 +452,11 @@ public partial class CodexToolWindowControl : UserControl
         var contextMenu = new ContextMenu();
         contextMenu.Items.Add(new MenuItem
         {
-            Header = "Copiar"
+            Header = _viewModel.Localization.CopyButton
         });
         contextMenu.Items.Add(new MenuItem
         {
-            Header = "Selecionar tudo"
+            Header = _viewModel.Localization.SelectAllButton
         });
 
         if (contextMenu.Items[0] is MenuItem copyMenuItem)

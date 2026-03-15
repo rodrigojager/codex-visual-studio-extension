@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using CodexVsix.Services;
 using Microsoft.VisualStudio.Shell;
 
 namespace CodexVsix;
@@ -36,7 +37,7 @@ internal static class CodexToolWindowManager
             var window = await package.ShowToolWindowAsync(typeof(CodexSettingsToolWindow), 0, true, package.DisposalToken);
             if (window?.Frame is null)
             {
-                throw new NotSupportedException("Nao foi possivel criar a janela de configuracoes do Codex.");
+                throw new NotSupportedException(new LocalizationService().SettingsToolWindowErrorMessage);
             }
 
             _settingsWindow = window;
@@ -44,7 +45,7 @@ internal static class CodexToolWindowManager
         }
         catch (Exception ex)
         {
-            ActivityLog.TryLogError("CodexVsix", "Falha ao abrir a janela de configuracoes do Codex." + Environment.NewLine + ex);
+            ActivityLog.TryLogError("CodexVsix", new LocalizationService().SettingsToolWindowOpenLogMessage + Environment.NewLine + ex);
         }
     }
 

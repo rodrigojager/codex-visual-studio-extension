@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.Design;
 using System.Threading.Tasks;
+using CodexVsix.Services;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 
@@ -35,17 +36,18 @@ internal sealed class ShowCodexToolWindowCommand
             ToolWindowPane window = await _package.ShowToolWindowAsync(typeof(CodexToolWindow), 0, true, _package.DisposalToken);
             if (window?.Frame is null)
             {
-                throw new NotSupportedException("Não foi possível criar a janela do Codex.");
+                throw new NotSupportedException(new LocalizationService().OpenWindowFailedMessage);
             }
         }
         catch (Exception ex)
         {
-            ActivityLog.TryLogError("CodexVsix", "Falha ao abrir a janela do Codex." + Environment.NewLine + ex);
+            var localization = new LocalizationService();
+            ActivityLog.TryLogError("CodexVsix", localization.ToolWindowOpenLogMessage + Environment.NewLine + ex);
 
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             VsShellUtilities.ShowMessageBox(
                 _package,
-                "A janela do Codex falhou ao abrir." + Environment.NewLine + Environment.NewLine + ex.Message,
+                localization.OpenWindowFailedMessage + Environment.NewLine + Environment.NewLine + ex.Message,
                 "Codex",
                 OLEMSGICON.OLEMSGICON_CRITICAL,
                 OLEMSGBUTTON.OLEMSGBUTTON_OK,

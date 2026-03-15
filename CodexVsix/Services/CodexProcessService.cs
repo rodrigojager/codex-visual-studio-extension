@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -18,17 +19,15 @@ public sealed class CodexProcessService : IDisposable
     private static readonly Regex MentionRegex = new(@"(?<!\S)@(?<value>\S+)", RegexOptions.Compiled);
     private static readonly Regex SkillRegex = new(@"(?<!\S)\$(?<value>[A-Za-z0-9][A-Za-z0-9._-]*)", RegexOptions.Compiled);
     private static readonly Regex TrailingPromptAfterPathRegex = new(@"(?:\.[A-Za-z0-9]{1,8})(?<prompt>[\p{L}\p{N}@#\$""'(\[].*)$", RegexOptions.Compiled);
-    private const string ExtensionContextPrefix = "Contexto da extensão: o diretório de trabalho atual do projeto aberto é \"";
-    private const string IdeContextPrefix = "Contexto atual da IDE:";
-    private const string PreferredMcpPrefix = "Atalhos MCP preferidos para este pedido:";
-    private static readonly string[] IdeContextLinePrefixes =
-    {
-        "Solução:",
-        "Documento ativo:",
-        "Itens selecionados:",
-        "Arquivos abertos:",
-        "Seleção ativa:"
-    };
+    private static readonly string[] ExtensionContextPrefixes = CreateLocalizedSet(localization => localization.ExtensionContextPrefix);
+    private static readonly string[] PreferredMcpPrefixes = CreateLocalizedSet(localization => localization.PreferredMcpPrefix);
+    private static readonly string[] IdeContextPrefixes = CreateLocalizedSet(localization => localization.IdeContextPrefix);
+    private static readonly string[] IdeContextLinePrefixes = CreateLocalizedSet(
+        localization => localization.IdeContextSolutionLabel,
+        localization => localization.IdeContextActiveDocumentLabel,
+        localization => localization.IdeContextSelectedItemsLabel,
+        localization => localization.IdeContextOpenFilesLabel,
+        localization => localization.IdeContextSelectionLabel);
 
     private readonly SemaphoreSlim _executionGate = new(1, 1);
     private readonly object _syncRoot = new();
@@ -1516,7 +1515,7 @@ public sealed class CodexProcessService : IDisposable
             }
         }
 
-        throw lastError ?? new InvalidOperationException("Failed to start turn.");
+        throw lastError ?? new InvalidOperationException(new LocalizationService(settings.LanguageOverride).StartTurnFailedMessage);
     }
 
     private static object BuildThreadResumeParams(string threadId, CodexExtensionSettings settings, string workingDirectory)
@@ -1580,9 +1579,10 @@ public sealed class CodexProcessService : IDisposable
 
     private object[] BuildUserInput(string prompt, CodexExtensionSettings settings, string workingDirectory, IEnumerable<string> imagePaths, string ideContextSummary)
     {
+        var localization = new LocalizationService(settings.LanguageOverride);
         var inputs = new List<object>();
 
-        var baseContext = "Contexto da extensão: o diretório de trabalho atual do projeto aberto é \"" + Path.GetFullPath(workingDirectory) + "\".";
+        var baseContext = localization.ExtensionContextPrefix + Path.GetFullPath(workingDirectory) + "\".";
         inputs.Add(new
         {
             type = "text",
@@ -1598,7 +1598,7 @@ public sealed class CodexProcessService : IDisposable
             });
         }
 
-        var preferredMcpContext = BuildPreferredMcpContext(settings);
+        var preferredMcpContext = BuildPreferredMcpContext(settings, localization);
         if (!string.IsNullOrWhiteSpace(preferredMcpContext))
         {
             inputs.Add(new
@@ -1636,7 +1636,7 @@ public sealed class CodexProcessService : IDisposable
         return inputs.ToArray();
     }
 
-    private static string BuildPreferredMcpContext(CodexExtensionSettings settings)
+    private static string BuildPreferredMcpContext(CodexExtensionSettings settings, LocalizationService localization)
     {
         var preferredServers = settings.PreferredMcpServers?
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -1644,7 +1644,7 @@ public sealed class CodexProcessService : IDisposable
             .ToArray();
 
         return preferredServers is { Length: > 0 }
-            ? "Atalhos MCP preferidos para este pedido: " + string.Join(", ", preferredServers) + "."
+            ? localization.PreferredMcpPrefix + " " + string.Join(", ", preferredServers) + "."
             : string.Empty;
     }
 
@@ -2025,9 +2025,9 @@ public sealed class CodexProcessService : IDisposable
             }
 
             var trimmed = text.Trim();
-            if (trimmed.StartsWith(ExtensionContextPrefix, StringComparison.Ordinal)
-                || trimmed.StartsWith(IdeContextPrefix, StringComparison.Ordinal)
-                || trimmed.StartsWith(PreferredMcpPrefix, StringComparison.Ordinal))
+            if (StartsWithAny(trimmed, ExtensionContextPrefixes)
+                || StartsWithAny(trimmed, IdeContextPrefixes)
+                || StartsWithAny(trimmed, PreferredMcpPrefixes))
             {
                 continue;
             }
@@ -2062,9 +2062,33 @@ public sealed class CodexProcessService : IDisposable
 
     private static bool ContainsInjectedContext(string text)
     {
-        return text.Contains(ExtensionContextPrefix, StringComparison.Ordinal)
-            || text.Contains(IdeContextPrefix, StringComparison.Ordinal)
-            || text.Contains(PreferredMcpPrefix, StringComparison.Ordinal);
+        return ContainsAny(text, ExtensionContextPrefixes)
+            || ContainsAny(text, IdeContextPrefixes)
+            || ContainsAny(text, PreferredMcpPrefixes);
+    }
+
+    private static bool StartsWithAny(string text, IEnumerable<string> prefixes)
+    {
+        return prefixes.Any(prefix => text.StartsWith(prefix, StringComparison.Ordinal));
+    }
+
+    private static bool ContainsAny(string text, IEnumerable<string> prefixes)
+    {
+        return prefixes.Any(prefix => text.Contains(prefix, StringComparison.Ordinal));
+    }
+
+    private static string[] CreateLocalizedSet(params Func<LocalizationService, string>[] selectors)
+    {
+        var languages = new[] { "pt-BR", "en", "es", "fr", "de" };
+        return languages
+            .SelectMany(language =>
+            {
+                var localization = new LocalizationService(language);
+                return selectors.Select(selector => selector(localization));
+            })
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static string TryExtractPromptFromThreadPreview(string preview)
@@ -2089,47 +2113,63 @@ public sealed class CodexProcessService : IDisposable
 
     private static string RemoveLeadingExtensionContext(string text)
     {
-        if (!text.StartsWith(ExtensionContextPrefix, StringComparison.Ordinal))
+        foreach (var prefix in ExtensionContextPrefixes)
         {
-            return text;
+            if (!text.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var closingQuoteIndex = text.IndexOf('"', prefix.Length);
+            if (closingQuoteIndex < 0)
+            {
+                return string.Empty;
+            }
+
+            var nextIndex = closingQuoteIndex + 1;
+            if (nextIndex < text.Length && text[nextIndex] == '.')
+            {
+                nextIndex++;
+            }
+
+            return text.Substring(nextIndex).TrimStart();
         }
 
-        var closingQuoteIndex = text.IndexOf('"', ExtensionContextPrefix.Length);
-        if (closingQuoteIndex < 0)
-        {
-            return string.Empty;
-        }
-
-        var nextIndex = closingQuoteIndex + 1;
-        if (nextIndex < text.Length && text[nextIndex] == '.')
-        {
-            nextIndex++;
-        }
-
-        return text.Substring(nextIndex).TrimStart();
+        return text;
     }
 
     private static string RemoveLeadingPreferredMcpContext(string text)
     {
-        if (!text.StartsWith(PreferredMcpPrefix, StringComparison.Ordinal))
+        foreach (var prefix in PreferredMcpPrefixes)
         {
-            return text;
+            if (!text.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var sentenceEndIndex = text.IndexOf('.');
+            if (sentenceEndIndex < 0)
+            {
+                return string.Empty;
+            }
+
+            return text.Substring(sentenceEndIndex + 1).TrimStart();
         }
 
-        var sentenceEndIndex = text.IndexOf('.');
-        if (sentenceEndIndex < 0)
-        {
-            return string.Empty;
-        }
-
-        return text.Substring(sentenceEndIndex + 1).TrimStart();
+        return text;
     }
 
     private static string RemoveLeadingIdeContextPrefix(string text)
     {
-        return text.StartsWith(IdeContextPrefix, StringComparison.Ordinal)
-            ? text.Substring(IdeContextPrefix.Length).TrimStart()
-            : text;
+        foreach (var prefix in IdeContextPrefixes)
+        {
+            if (text.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return text.Substring(prefix.Length).TrimStart();
+            }
+        }
+
+        return text;
     }
 
     private static bool TryStripLeadingIdeContextLine(ref string text)
@@ -2265,9 +2305,9 @@ public sealed class CodexProcessService : IDisposable
                 case "text":
                     var text = item?["text"]?.Value<string>();
                     if (!string.IsNullOrWhiteSpace(text)
-                        && !text.TrimStart().StartsWith(ExtensionContextPrefix, StringComparison.Ordinal)
-                        && !text.TrimStart().StartsWith(IdeContextPrefix, StringComparison.Ordinal)
-                        && !text.TrimStart().StartsWith(PreferredMcpPrefix, StringComparison.Ordinal))
+                        && !StartsWithAny(text.TrimStart(), ExtensionContextPrefixes)
+                        && !StartsWithAny(text.TrimStart(), IdeContextPrefixes)
+                        && !StartsWithAny(text.TrimStart(), PreferredMcpPrefixes))
                     {
                         segments.Add(text.Trim());
                     }
@@ -2301,16 +2341,17 @@ public sealed class CodexProcessService : IDisposable
 
     private static ChatMessage? BuildThreadEventMessage(JToken? item)
     {
+        var localization = new LocalizationService();
         var itemType = item?["type"]?.Value<string>();
         switch (itemType)
         {
             case "plan":
                 var planText = NormalizeDetail(item?["text"]?.Value<string>());
-                return CreateEventMessage("Plan", BuildSummary(planText, "Plan updated"), planText);
+                return CreateEventMessage(localization.EventPlanTitle, BuildSummary(planText, localization.EventPlanUpdated), planText);
 
             case "reasoning":
                 var reasoningText = NormalizeDetail(JoinTextArray(item?["summary"]));
-                return CreateEventMessage("Reasoning", BuildSummary(reasoningText, "Reasoning updated"), reasoningText);
+                return CreateEventMessage(localization.EventReasoningTitle, BuildSummary(reasoningText, localization.EventReasoningUpdated), reasoningText);
 
             case "commandExecution":
                 var command = item?["command"]?.Value<string>();
@@ -2320,15 +2361,15 @@ public sealed class CodexProcessService : IDisposable
                 var aggregatedOutput = NormalizeDetail(item?["aggregatedOutput"]?.Value<string>());
                 var cwd = item?["cwd"]?.Value<string>();
                 return CreateEventMessage(
-                    "Command",
-                    BuildCommandSummary(command, status, exitCode, durationMs),
+                    localization.EventCommandTitle,
+                    BuildCommandSummary(command, status, exitCode, durationMs, localization),
                     BuildDetailSections(
-                        string.IsNullOrWhiteSpace(cwd) ? null : "Working directory" + Environment.NewLine + cwd.Trim(),
-                        string.IsNullOrWhiteSpace(aggregatedOutput) ? null : "Output" + Environment.NewLine + aggregatedOutput));
+                        string.IsNullOrWhiteSpace(cwd) ? null : localization.EventWorkingDirectoryLabel + Environment.NewLine + cwd.Trim(),
+                        string.IsNullOrWhiteSpace(aggregatedOutput) ? null : localization.EventOutputLabel + Environment.NewLine + aggregatedOutput));
 
             case "fileChange":
                 var changes = item?["changes"] as JArray;
-                return CreateEventMessage("File changes", BuildFileChangeSummary(changes), BuildFileChangeDetail(changes));
+                return CreateEventMessage(localization.EventFileChangesTitle, BuildFileChangeSummary(changes, localization), BuildFileChangeDetail(changes, localization));
 
             case "mcpToolCall":
                 var server = item?["server"]?.Value<string>();
@@ -2353,22 +2394,22 @@ public sealed class CodexProcessService : IDisposable
                 }
 
                 return CreateEventMessage(
-                    "MCP tool",
-                    BuildToolSummary(toolLabel, toolStatus, toolDurationMs, mcpSuccess),
+                    localization.EventMcpToolTitle,
+                    BuildToolSummary(toolLabel, toolStatus, toolDurationMs, localization, mcpSuccess),
                     BuildDetailSections(
-                        BuildNamedJsonBlock("Arguments", item?["arguments"]),
-                        string.IsNullOrWhiteSpace(errorMessage) ? null : "Error" + Environment.NewLine + errorMessage.Trim(),
-                        BuildNamedTextBlock("Result", ExtractContentText(GetNestedToken(item, "result", "content")) ?? SerializeStructuredValue(item?["result"]))));
+                        BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"]),
+                        string.IsNullOrWhiteSpace(errorMessage) ? null : localization.EventErrorLabel + Environment.NewLine + errorMessage.Trim(),
+                        BuildNamedTextBlock(localization.EventResultLabel, ExtractContentText(GetNestedToken(item, "result", "content")) ?? SerializeStructuredValue(item?["result"]))));
 
             case "dynamicToolCall":
                 var dynamicTool = item?["tool"]?.Value<string>();
                 var success = item?["success"]?.Value<bool?>();
                 return CreateEventMessage(
-                    "Tool",
-                    BuildToolSummary(dynamicTool, item?["status"]?.Value<string>(), item?["durationMs"]?.Value<long?>(), success),
+                    localization.EventToolTitle,
+                    BuildToolSummary(dynamicTool, item?["status"]?.Value<string>(), item?["durationMs"]?.Value<long?>(), localization, success),
                     BuildDetailSections(
-                        BuildNamedJsonBlock("Arguments", item?["arguments"]),
-                        BuildNamedTextBlock("Output", ExtractContentText(item?["contentItems"]) ?? SerializeStructuredValue(item?["contentItems"]))));
+                        BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"]),
+                        BuildNamedTextBlock(localization.EventOutputLabel, ExtractContentText(item?["contentItems"]) ?? SerializeStructuredValue(item?["contentItems"]))));
 
             case "collabAgentToolCall":
                 var collabTool = item?["tool"]?.Value<string>();
@@ -2376,36 +2417,36 @@ public sealed class CodexProcessService : IDisposable
                     ? string.Join(", ", receivers.Values<string>().Where(value => !string.IsNullOrWhiteSpace(value)))
                     : string.Empty;
                 return CreateEventMessage(
-                    "Agent tool",
-                    BuildSummary(string.IsNullOrWhiteSpace(receiverIds) ? collabTool : collabTool + " -> " + receiverIds, "Agent tool used"),
+                    localization.EventAgentToolTitle,
+                    BuildSummary(string.IsNullOrWhiteSpace(receiverIds) ? collabTool : collabTool + " -> " + receiverIds, localization.EventAgentToolUsed),
                     BuildDetailSections(
-                        BuildNamedTextBlock("Prompt", NormalizeDetail(item?["prompt"]?.Value<string>())),
-                        BuildNamedJsonBlock("Arguments", item?["arguments"])));
+                        BuildNamedTextBlock(localization.EventPromptLabel, NormalizeDetail(item?["prompt"]?.Value<string>())),
+                        BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"])));
 
             case "webSearch":
                 var query = item?["query"]?.Value<string>();
                 return CreateEventMessage(
-                    "Web search",
-                    BuildSummary(query, "Web search"),
-                    BuildNamedTextBlock("Result", ExtractContentText(GetNestedToken(item, "result", "content")) ?? SerializeStructuredValue(item?["result"])));
+                    localization.EventWebSearchTitle,
+                    BuildSummary(query, localization.EventWebSearchTitle),
+                    BuildNamedTextBlock(localization.EventResultLabel, ExtractContentText(GetNestedToken(item, "result", "content")) ?? SerializeStructuredValue(item?["result"])));
 
             case "imageView":
-                return CreateEventMessage("Image view", BuildSummary(item?["path"]?.Value<string>(), "Image viewed"));
+                return CreateEventMessage(localization.EventImageViewTitle, BuildSummary(item?["path"]?.Value<string>(), localization.EventImageViewed));
 
             case "imageGeneration":
                 return CreateEventMessage(
-                    "Image generation",
-                    BuildSummary(item?["status"]?.Value<string>(), "Image generated"),
-                    BuildNamedTextBlock("Prompt", NormalizeDetail(item?["prompt"]?.Value<string>())));
+                    localization.EventImageGenerationTitle,
+                    BuildSummary(item?["status"]?.Value<string>(), localization.EventImageGenerated),
+                    BuildNamedTextBlock(localization.EventPromptLabel, NormalizeDetail(item?["prompt"]?.Value<string>())));
 
             case "enteredReviewMode":
-                return CreateEventMessage("Review mode", BuildSummary(item?["review"]?.Value<string>(), "Entered review mode"));
+                return CreateEventMessage(localization.EventReviewModeTitle, BuildSummary(item?["review"]?.Value<string>(), localization.EventEnteredReviewMode));
 
             case "exitedReviewMode":
-                return CreateEventMessage("Review mode", BuildSummary(item?["review"]?.Value<string>(), "Exited review mode"));
+                return CreateEventMessage(localization.EventReviewModeTitle, BuildSummary(item?["review"]?.Value<string>(), localization.EventExitedReviewMode));
 
             case "contextCompaction":
-                return CreateEventMessage("Context", "Conversation context compacted");
+                return CreateEventMessage(localization.EventContextTitle, localization.EventConversationContextCompacted);
 
             default:
                 return null;
@@ -2424,7 +2465,7 @@ public sealed class CodexProcessService : IDisposable
         return new ChatMessage(false, normalizedSummary, isEvent: true, title: title, detail: normalizedDetail);
     }
 
-    private static string BuildCommandSummary(string? command, string? status, int? exitCode, long? durationMs)
+    private static string BuildCommandSummary(string? command, string? status, int? exitCode, long? durationMs, LocalizationService localization)
     {
         var parts = new List<string>();
         var compactCommand = CompactSingleLine(command);
@@ -2449,14 +2490,14 @@ public sealed class CodexProcessService : IDisposable
             parts.Add(durationSuffix);
         }
 
-        return parts.Count == 0 ? "Command executed" : string.Join(" ", parts);
+        return parts.Count == 0 ? localization.EventCommandExecuted : string.Join(" ", parts);
     }
 
-    private static string BuildFileChangeSummary(JArray? changes)
+    private static string BuildFileChangeSummary(JArray? changes, LocalizationService localization)
     {
         if (changes is null || changes.Count == 0)
         {
-            return "updated files";
+            return localization.EventUpdatedFiles;
         }
 
         var parts = new List<string>();
@@ -2472,13 +2513,13 @@ public sealed class CodexProcessService : IDisposable
 
         if (changes.Count > 3)
         {
-            parts.Add("+" + (changes.Count - 3) + " more");
+            parts.Add(string.Format(CultureInfo.CurrentUICulture, localization.EventMoreFormat, changes.Count - 3));
         }
 
         return string.Join(", ", parts);
     }
 
-    private static string? BuildFileChangeDetail(JArray? changes)
+    private static string? BuildFileChangeDetail(JArray? changes, LocalizationService localization)
     {
         if (changes is null || changes.Count == 0)
         {
@@ -2490,14 +2531,14 @@ public sealed class CodexProcessService : IDisposable
         {
             var path = change?["path"]?.Value<string>();
             var kind = GetNestedString(change, "kind", "type");
-            var header = BuildSummary(string.IsNullOrWhiteSpace(kind) ? path : kind + " " + path, "file updated");
+            var header = BuildSummary(string.IsNullOrWhiteSpace(kind) ? path : kind + " " + path, localization.EventFileUpdated);
             var diff = NormalizeDetail(change?["diff"]?.Value<string>());
             details.Add(string.IsNullOrWhiteSpace(diff) ? header : header + Environment.NewLine + Truncate(diff, 700));
         }
 
         if (changes.Count > 6)
         {
-            details.Add("+" + (changes.Count - 6) + " more files");
+            details.Add(string.Format(CultureInfo.CurrentUICulture, localization.EventMoreFilesFormat, changes.Count - 6));
         }
 
         return string.Join(Environment.NewLine + Environment.NewLine, details);
@@ -2514,7 +2555,7 @@ public sealed class CodexProcessService : IDisposable
         return string.Join(" ", values.Values<string>().Where(value => !string.IsNullOrWhiteSpace(value)));
     }
 
-    private static string BuildToolSummary(string? label, string? status, long? durationMs, bool? success = null)
+    private static string BuildToolSummary(string? label, string? status, long? durationMs, LocalizationService localization, bool? success = null)
     {
         var parts = new List<string>();
         var compactLabel = CompactSingleLine(label);
@@ -2525,7 +2566,7 @@ public sealed class CodexProcessService : IDisposable
 
         if (success.HasValue)
         {
-            parts.Add(success.Value ? "[completed]" : "[failed]");
+            parts.Add(success.Value ? "[" + localization.EventCompletedStatus + "]" : "[" + localization.EventFailedStatus + "]");
         }
         else if (!string.IsNullOrWhiteSpace(status))
         {
@@ -2538,7 +2579,7 @@ public sealed class CodexProcessService : IDisposable
             parts.Add(durationSuffix);
         }
 
-        return parts.Count == 0 ? "Tool call" : string.Join(" ", parts);
+        return parts.Count == 0 ? localization.EventToolCall : string.Join(" ", parts);
     }
 
     private static string BuildSummary(string? value, string fallback)
