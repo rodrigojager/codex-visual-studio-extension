@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <Metadata>
-    <Identity Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61" Version="1.1.5" Language="pt-BR" Publisher="Rodrigo Jager" />
+    <Identity Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61" Version="1.1.6" Language="pt-BR" Publisher="Rodrigo Jager" />
     <DisplayName>Codex for Visual Studio 2026</DisplayName>
     <Description xml:space="preserve">Abre um painel lateral no Visual Studio 2026 para interagir com o Codex.</Description>
   </Metadata>

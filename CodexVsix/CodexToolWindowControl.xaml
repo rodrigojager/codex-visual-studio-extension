@@ -9,12 +9,15 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <ui:PathToFileNameConverter x:Key="PathToFileNameConverter" />
+        <ui:RecentHistoryMaxHeightConverter x:Key="RecentHistoryMaxHeightConverter" />
+        <ui:ResponsivePanelWidthConverter x:Key="ResponsivePanelWidthConverter" />
         <ui:StringsEqualToVisibilityConverter x:Key="StringsEqualToVisibilityConverter" />
 
         <Geometry x:Key="PaperclipIcon">M224.6 12.8c56.2-56.2 147.4-56.2 203.6 0s56.2 147.4 0 203.6l-164 164c-34.4 34.4-90.1 34.4-124.5 0s-34.4-90.1 0-124.5L292.5 103.3c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3L185 301.3c-9.4 9.4-9.4 24.6 0 33.9s24.6 9.4 33.9 0l164-164c31.2-31.2 31.2-81.9 0-113.1s-81.9-31.2-113.1 0l-164 164c-53.1 53.1-53.1 139.2 0 192.3s139.2 53.1 192.3 0L428.3 284.3c12.5-12.5 32.8-12.5 45.3 0s12.5 32.8 0 45.3L343.4 459.6c-78.1 78.1-204.7 78.1-282.8 0s-78.1-204.7 0-282.8l164-164z</Geometry>
         <Geometry x:Key="HistoryIcon">M48 106.7L48 56c0-13.3-10.7-24-24-24S0 42.7 0 56L0 168c0 13.3 10.7 24 24 24l112 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-55.3 0c37-57.8 101.7-96 175.3-96 114.9 0 208 93.1 208 208S370.9 464 256 464c-42.5 0-81.9-12.7-114.7-34.5-11-7.3-25.9-4.3-33.3 6.7s-4.3 25.9 6.7 33.3c40.5 26.8 89.1 42.5 141.3 42.5 141.4 0 256-114.6 256-256S397.4 0 256 0C170.3 0 94.4 42.1 48 106.7zM256 128c-13.3 0-24 10.7-24 24l0 104c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65 0-94.1c0-13.3-10.7-24-24-24z</Geometry>
         <Geometry x:Key="SettingsIcon">M195.1 9.5C198.1-5.3 211.2-16 226.4-16l59.8 0c15.2 0 28.3 10.7 31.3 25.5L332 79.5c14.1 6 27.3 13.7 39.3 22.8l67.8-22.5c14.4-4.8 30.2 1.2 37.8 14.4l29.9 51.8c7.6 13.2 4.9 29.8-6.5 39.9L447 233.3c.9 7.4 1.3 15 1.3 22.7s-.5 15.3-1.3 22.7l53.4 47.5c11.4 10.1 14 26.8 6.5 39.9l-29.9 51.8c-7.6 13.1-23.4 19.2-37.8 14.4l-67.8-22.5c-12.1 9.1-25.3 16.7-39.3 22.8l-14.4 69.9c-3.1 14.9-16.2 25.5-31.3 25.5l-59.8 0c-15.2 0-28.3-10.7-31.3-25.5l-14.4-69.9c-14.1-6-27.2-13.7-39.3-22.8L73.5 432.3c-14.4 4.8-30.2-1.2-37.8-14.4L5.8 366.1c-7.6-13.2-4.9-29.8 6.5-39.9l53.4-47.5c-.9-7.4-1.3-15-1.3-22.7s.5-15.3 1.3-22.7L12.3 185.8c-11.4-10.1-14-26.8-6.5-39.9L35.7 94.1c7.6-13.2 23.4-19.2 37.8-14.4l67.8 22.5c12.1-9.1 25.3-16.7 39.3-22.8L195.1 9.5zM256.3 336a80 80 0 1 0 -.6-160 80 80 0 1 0 .6 160z</Geometry>
         <Geometry x:Key="SendIcon">M214.6 17.4c-12.5-12.5-32.8-12.5-45.3 0l-160 160c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 117.3 160 488c0 17.7 14.3 32 32 32s32-14.3 32-32l0-370.7 105.4 105.4c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3l-160-160z</Geometry>
+        <Geometry x:Key="StopIcon">M96 32C60.7 32 32 60.7 32 96l0 320c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L96 32z</Geometry>
         <Geometry x:Key="ClipboardIcon">M320 32l-8.6 0C300.4 12.9 279.7 0 256 0L128 0C104.3 0 83.6 12.9 72.6 32L64 32C28.7 32 0 60.7 0 96L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-352c0-35.3-28.7-64-64-64zM136 112c-13.3 0-24-10.7-24-24s10.7-24 24-24l112 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-112 0z</Geometry>
         <Geometry x:Key="BoltIcon">M338.8-9.9c11.9 8.6 16.3 24.2 10.9 37.8L271.3 224 416 224c13.5 0 25.5 8.4 30.1 21.1s.7 26.9-9.6 35.5l-288 240c-11.3 9.4-27.4 9.9-39.3 1.3s-16.3-24.2-10.9-37.8L176.7 288 32 288c-13.5 0-25.5-8.4-30.1-21.1s-.7-26.9 9.6-35.5l288-240c11.3-9.4 27.4-9.9 39.3-1.3z</Geometry>
         <Geometry x:Key="BarsIcon">M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z</Geometry>
@@ -26,6 +29,7 @@
         <Geometry x:Key="SearchIcon">M505 442.7L405.3 343c28.4-34.9 45.5-79.4 45.5-128C450.8 96.2 354.6 0 235.4 0S20 96.2 20 215.4s96.2 215.4 215.4 215.4c48.6 0 93.1-17.1 128-45.5L463.1 485c11.7 11.7 30.7 11.7 42.4 0s11.2-30.6-.5-42.3zM80 215.4C80 129.3 149.3 60 235.4 60s155.4 69.3 155.4 155.4-69.3 155.4-155.4 155.4S80 301.5 80 215.4z</Geometry>
         <Geometry x:Key="WarningIcon">M256 0c14.7 0 28.2 8.1 35.2 21l216 400c6.7 12.4 6.4 27.4-.8 39.5S486.1 480 472 480L40 480c-14.1 0-27.2-7.4-34.4-19.5s-7.5-27.1-.8-39.5l216-400c7-12.9 20.5-21 35.2-21zm0 352a32 32 0 1 0 0 64 32 32 0 1 0 0-64zm0-192c-18.2 0-32.7 15.5-31.4 33.7l7.4 104c.9 12.5 11.4 22.3 23.9 22.3 12.6 0 23-9.7 23.9-22.3l7.4-104c1.3-18.2-13.1-33.7-31.4-33.7z</Geometry>
         <Geometry x:Key="CloseIcon">M55.1 73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L147.2 256 9.9 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192.5 301.3 329.9 438.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.8 256 375.1 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192.5 210.7 55.1 73.4z</Geometry>
+        <Geometry x:Key="TrashIcon">M136.7 5.9L128 32 32 32C14.3 32 0 46.3 0 64S14.3 96 32 96l384 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-96 0-8.7-26.1C306.9-7.2 294.7-16 280.9-16L167.1-16c-13.8 0-26 8.8-30.4 21.9zM416 144L32 144 53.1 467.1C54.7 492.4 75.7 512 101 512L347 512c25.3 0 46.3-19.6 47.9-44.9L416 144z</Geometry>
         <Geometry x:Key="CheckIcon">M434.8 70.1c14.3 10.4 17.5 30.4 7.1 44.7l-256 352c-5.5 7.6-14 12.3-23.4 13.1s-18.5-2.7-25.1-9.3l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l101.5 101.5 234-321.7c10.4-14.3 30.4-17.5 44.7-7.1z</Geometry>
         <Geometry x:Key="BanIcon">M367.2 412.5L99.5 144.8c-22.4 31.4-35.5 69.8-35.5 111.2 0 106 86 192 192 192 41.5 0 79.9-13.1 111.2-35.5zm45.3-45.3c22.4-31.4 35.5-69.8 35.5-111.2 0-106-86-192-192-192-41.5 0-79.9 13.1-111.2 35.5L412.5 367.2zM0 256a256 256 0 1 1 512 0 256 256 0 1 1 -512 0z</Geometry>
         <Geometry x:Key="BrainIcon">M120 56c0-30.9 25.1-56 56-56l24 0c17.7 0 32 14.3 32 32l0 448c0 17.7-14.3 32-32 32l-32 0c-29.8 0-54.9-20.4-62-48-.7 0-1.3 0-2 0-44.2 0-80-35.8-80-80 0-18 6-34.6 16-48-19.4-14.6-32-37.8-32-64 0-30.9 17.6-57.8 43.2-71.1-7.1-12-11.2-26-11.2-40.9 0-44.2 35.8-80 80-80l0-24zm272 0l0 24c44.2 0 80 35.8 80 80 0 15-4.1 29-11.2 40.9 25.7 13.3 43.2 40.1 43.2 71.1 0 26.2-12.6 49.4-32 64 10 13.4 16 30 16 48 0 44.2-35.8 80-80 80-.7 0-1.3 0-2 0-7.1 27.6-32.2 48-62 48l-32 0c-17.7 0-32-14.3-32-32l0-448c0-17.7 14.3-32 32-32l24 0c30.9 0 56 25.1 56 56z</Geometry>
@@ -688,7 +692,7 @@
                 Visibility="Collapsed"
                 Margin="8,8,0,8"
                 Padding="8,10"
-                Width="{Binding SidebarWidth}"
+                Width="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=ActualWidth, Converter={StaticResource ResponsivePanelWidthConverter}}"
                 Background="{StaticResource PanelBrushSoft}"
                 BorderBrush="{StaticResource PanelBorderBrush}"
                 BorderThickness="1"
@@ -749,10 +753,25 @@
                                            FontSize="12"
                                            FontWeight="SemiBold"
                                            Text="{Binding Localization.TopicsTitle}" />
-                                <Button DockPanel.Dock="Right"
-                                        Style="{StaticResource MiniButtonStyle}"
-                                        Content="{Binding Localization.NewTopicButton}"
-                                        Command="{Binding NewThreadCommand}" />
+                                <StackPanel DockPanel.Dock="Right"
+                                            Orientation="Horizontal">
+                                    <Button Margin="0,0,6,0"
+                                            Style="{StaticResource MiniButtonStyle}"
+                                            Content="{Binding Localization.NewTopicButton}"
+                                            Command="{Binding NewThreadCommand}" />
+                                    <Button Width="24"
+                                            Height="24"
+                                            Padding="0"
+                                            Style="{StaticResource IconButtonStyle}"
+                                            ToolTip="Fechar"
+                                            Command="{Binding CloseSidebarCommand}">
+                                        <Viewbox Width="10" Height="10">
+                                            <Path Data="{StaticResource CloseIcon}"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                  Stretch="Uniform" />
+                                        </Viewbox>
+                                    </Button>
+                                </StackPanel>
                             </DockPanel>
 
                             <ListBox Grid.Row="1"
@@ -761,24 +780,58 @@
                                      ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}"
                                      Background="Transparent"
                                      BorderThickness="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      Foreground="{StaticResource TextSecondaryBrush}">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid>
+                                        <Grid ToolTip="{Binding Title}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="56" />
+                                                <ColumnDefinition Width="28" />
+                                            </Grid.ColumnDefinitions>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
-                                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                            <TextBlock Grid.Column="0"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"
                                                        FontWeight="SemiBold"
                                                        Text="{Binding Title}"
                                                        TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Row="1"
+                                                       Grid.Column="0"
                                                        Margin="0,4,0,0"
                                                        Foreground="{StaticResource TextMutedBrush}"
                                                        FontSize="11"
                                                        Text="{Binding Subtitle}"
                                                        TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.RowSpan="2"
+                                                       Grid.Column="1"
+                                                       Margin="12,0,0,0"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Top"
+                                                       Foreground="{StaticResource TextMutedBrush}"
+                                                       FontSize="11"
+                                                       Text="{Binding UpdatedAtLabel}" />
+                                            <Button Grid.RowSpan="2"
+                                                    Grid.Column="2"
+                                                    Width="22"
+                                                    Height="22"
+                                                    Margin="6,0,0,0"
+                                                    Padding="0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Style="{StaticResource IconButtonStyle}"
+                                                    ToolTip="Excluir do histórico"
+                                                    Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <Viewbox Width="9" Height="9">
+                                                    <Path Data="{StaticResource TrashIcon}"
+                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          Stretch="Uniform" />
+                                                </Viewbox>
+                                            </Button>
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -1246,21 +1299,21 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Column="1" Margin="14,10,14,12">
+        <Grid x:Name="MainContentGrid" Grid.Column="1" Margin="14,10,14,12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <DockPanel Grid.Row="0"
-                       Margin="0,0,0,10">
+            <StackPanel x:Name="TopToolbarHost"
+                        Grid.Row="0"
+                        Margin="0,0,0,10"
+                        Orientation="Horizontal">
                 <Button x:Name="HistoryToolbarButton"
                         Width="32"
                         Height="28"
                         Margin="0,0,8,0"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Top"
                         Style="{StaticResource TopIconButtonStyle}"
                         ToolTip="{Binding Localization.HistoryTooltip}"
                         Command="{Binding ToggleHistoryPanelCommand}">
@@ -1274,9 +1327,7 @@
                 <Button x:Name="SettingsToolbarButton"
                         Width="32"
                         Height="28"
-                        Margin="0,0,0,0"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Top"
+                        Margin="0,0,8,0"
                         Style="{StaticResource TopIconButtonStyle}"
                         ToolTip="{Binding Localization.SettingsTooltip}"
                         Command="{Binding ToggleSettingsPanelCommand}">
@@ -1288,20 +1339,17 @@
                 </Button>
 
                 <Button Width="32"
-                        Height="32"
-                        Margin="8,0,0,0"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Top"
-                        Style="{StaticResource IconButtonStyle}"
+                        Height="28"
+                        Style="{StaticResource TopIconButtonStyle}"
                         ToolTip="{Binding Localization.NewTopicButton}"
                         Command="{Binding NewThreadCommand}">
-                    <Viewbox Width="16" Height="16">
+                    <Viewbox Width="14" Height="14">
                         <Path Data="{StaticResource EditIcon}"
                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               Stretch="Uniform" />
                     </Viewbox>
                 </Button>
-            </DockPanel>
+            </StackPanel>
 
             <Popup PlacementTarget="{Binding ElementName=HistoryToolbarButton}"
                    Placement="Bottom"
@@ -1693,7 +1741,8 @@
                 </Border>
             </Popup>
 
-            <Grid Grid.Row="1">
+            <Grid x:Name="ConversationAreaHost"
+                  Grid.Row="1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -1706,46 +1755,112 @@
 
                 <StackPanel Grid.Row="0"
                             Grid.Column="0"
-                            Margin="34,4,96,18">
+                            Margin="24,4,32,18">
                     <Border Padding="14,12"
                             Margin="0,0,0,12"
+                            Width="{Binding RelativeSource={RelativeSource AncestorType=StackPanel}, Path=ActualWidth}"
+                            HorizontalAlignment="Stretch"
                             Background="{StaticResource EventCardBrush}"
                             BorderBrush="{StaticResource EventCardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="14"
                             Visibility="{Binding ShowRecentTasksPreview, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <StackPanel>
-                            <DockPanel LastChildFill="False" Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,10">
                                 <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
                                            FontSize="15"
                                            FontWeight="SemiBold"
                                            Text="{Binding Localization.TasksTitle}" />
+                                <Button DockPanel.Dock="Right"
+                                        Width="26"
+                                        Height="26"
+                                        Padding="0"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        ToolTip="Fechar"
+                                        Command="{Binding DismissRecentTasksPreviewCommand}">
+                                    <Viewbox Width="10" Height="10">
+                                        <Path Data="{StaticResource CloseIcon}"
+                                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              Stretch="Uniform" />
+                                    </Viewbox>
+                                </Button>
                             </DockPanel>
 
-                            <ListBox ItemsSource="{Binding RecentThreadsPreview}"
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding RecentThreadsPreview}"
                                      SelectedItem="{Binding SelectedThread}"
                                      Background="Transparent"
                                      BorderThickness="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}">
+                                <ListBox.Style>
+                                    <Style TargetType="ListBox">
+                                        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                                        <Setter Property="MaxHeight">
+                                            <Setter.Value>
+                                                <MultiBinding Converter="{StaticResource RecentHistoryMaxHeightConverter}">
+                                                    <Binding ElementName="MainContentGrid" Path="ActualHeight" />
+                                                    <Binding ElementName="PromptComposerBorder" Path="ActualHeight" />
+                                                    <Binding ElementName="TopToolbarHost" Path="ActualHeight" />
+                                                    <Binding Path="IsRecentTasksPreviewExpanded" />
+                                                </MultiBinding>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsRecentTasksPreviewExpanded}" Value="True">
+                                                <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ListBox.Style>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <DockPanel LastChildFill="True">
-                                            <TextBlock DockPanel.Dock="Right"
+                                        <Grid ToolTip="{Binding Title}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="56" />
+                                                <ColumnDefinition Width="28" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                                       FontSize="13"
+                                                       Text="{Binding Title}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="1"
                                                        Margin="12,0,0,0"
+                                                       HorizontalAlignment="Right"
                                                        VerticalAlignment="Center"
                                                        Foreground="{StaticResource TextMutedBrush}"
                                                        FontSize="11"
                                                        Text="{Binding UpdatedAtLabel}" />
-                                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
-                                                       FontSize="13"
-                                                       Text="{Binding Title}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </DockPanel>
+                                            <Button Grid.Column="2"
+                                                    Width="22"
+                                                    Height="22"
+                                                    Margin="6,0,0,0"
+                                                    Padding="0"
+                                                    Style="{StaticResource IconButtonStyle}"
+                                                    ToolTip="Excluir do histórico"
+                                                    Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <Viewbox Width="9" Height="9">
+                                                    <Path Data="{StaticResource TrashIcon}"
+                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          Stretch="Uniform" />
+                                                </Viewbox>
+                                            </Button>
+                                        </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
 
-                            <Button Padding="0"
+                            <Button Grid.Row="2"
+                                    Padding="0"
                                     Margin="0,4,0,0"
                                     HorizontalAlignment="Left"
                                     Background="Transparent"
@@ -1756,7 +1871,7 @@
                                     Visibility="{Binding HasMoreThreadsThanPreview, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBlock Text="{Binding Localization.ViewAllTasksLabel}" />
                             </Button>
-                        </StackPanel>
+                        </Grid>
                     </Border>
 
                     <Border Padding="14,12"
@@ -2621,6 +2736,7 @@
 
                         <Grid Grid.Row="1" Margin="0">
                             <Border Padding="2"
+                                    Width="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=ActualWidth, Converter={StaticResource ResponsivePanelWidthConverter}}"
                                     Background="Transparent"
                                     Visibility="{Binding ShowHistoryPanel, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <Grid>
@@ -2635,10 +2751,25 @@
                                                    FontSize="18"
                                                    FontWeight="SemiBold"
                                                    Text="{Binding Localization.TasksTitle}" />
-                                        <Button DockPanel.Dock="Right"
-                                                Style="{StaticResource ChipButtonStyle}"
-                                                Content="{Binding Localization.NewTopicButton}"
-                                                Command="{Binding NewThreadCommand}" />
+                                        <StackPanel DockPanel.Dock="Right"
+                                                    Orientation="Horizontal">
+                                            <Button Margin="0,0,8,0"
+                                                    Style="{StaticResource ChipButtonStyle}"
+                                                    Content="{Binding Localization.NewTopicButton}"
+                                                    Command="{Binding NewThreadCommand}" />
+                                            <Button Width="28"
+                                                    Height="28"
+                                                    Padding="0"
+                                                    Style="{StaticResource IconButtonStyle}"
+                                                    ToolTip="Fechar"
+                                                    Command="{Binding CloseSidebarCommand}">
+                                                <Viewbox Width="10" Height="10">
+                                                    <Path Data="{StaticResource CloseIcon}"
+                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          Stretch="Uniform" />
+                                                </Viewbox>
+                                            </Button>
+                                        </StackPanel>
                                     </DockPanel>
 
                                     <TextBox Grid.Row="1"
@@ -2651,28 +2782,61 @@
                                              SelectedItem="{Binding SelectedThread}"
                                              Background="Transparent"
                                              BorderThickness="0"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                              ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <DockPanel LastChildFill="True">
-                                                    <TextBlock DockPanel.Dock="Right"
+                                                <Grid ToolTip="{Binding Title}">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="56" />
+                                                        <ColumnDefinition Width="28" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+
+                                                    <TextBlock Grid.Column="0"
+                                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                                               FontSize="13"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding Title}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Grid.Row="1"
+                                                               Grid.Column="0"
+                                                               Margin="0,2,0,0"
+                                                               Foreground="{StaticResource TextMutedBrush}"
+                                                               FontSize="11"
+                                                               Text="{Binding Subtitle}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Grid.RowSpan="2"
+                                                               Grid.Column="1"
                                                                Margin="12,0,0,0"
+                                                               HorizontalAlignment="Right"
+                                                               VerticalAlignment="Top"
                                                                Foreground="{StaticResource TextMutedBrush}"
                                                                FontSize="11"
                                                                Text="{Binding UpdatedAtLabel}" />
-                                                    <StackPanel>
-                                                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
-                                                                   FontSize="13"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="{Binding Title}"
-                                                                   TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Margin="0,2,0,0"
-                                                                   Foreground="{StaticResource TextMutedBrush}"
-                                                                   FontSize="11"
-                                                                   Text="{Binding Subtitle}"
-                                                                   TextTrimming="CharacterEllipsis" />
-                                                    </StackPanel>
-                                                </DockPanel>
+                                                    <Button Grid.RowSpan="2"
+                                                            Grid.Column="2"
+                                                            Width="22"
+                                                            Height="22"
+                                                            Margin="6,0,0,0"
+                                                            Padding="0"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Style="{StaticResource IconButtonStyle}"
+                                                            ToolTip="Excluir do histórico"
+                                                            Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Viewbox Width="9" Height="9">
+                                                            <Path Data="{StaticResource TrashIcon}"
+                                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                  Stretch="Uniform" />
+                                                        </Viewbox>
+                                                    </Button>
+                                                </Grid>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
                                     </ListBox>
@@ -2843,7 +3007,8 @@
 
             </Grid>
 
-            <Border Grid.Row="2"
+            <Border x:Name="PromptComposerBorder"
+                    Grid.Row="2"
                     Padding="0"
                     Background="{StaticResource InputBrush}"
                     BorderBrush="{StaticResource InputBorderBrush}"
@@ -3400,13 +3565,65 @@
                         <Button Grid.Column="1"
                                 Margin="0,0,0,8"
                                 Style="{StaticResource SendButtonStyle}"
-                                ToolTip="{Binding Localization.SendTooltip}"
-                                Command="{Binding SendCommand}">
-                            <Viewbox Width="14" Height="14">
-                                <Path Data="{StaticResource SendIcon}"
-                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                      Stretch="Uniform" />
-                            </Viewbox>
+                                ToolTip="{Binding PrimaryActionTooltip}"
+                                Command="{Binding PrimaryActionCommand}">
+                            <Grid Width="14" Height="14">
+                                <Viewbox Width="14"
+                                         Height="14"
+                                         Visibility="{Binding ShowSendActionIcon, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Path Data="{StaticResource SendIcon}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          Stretch="Uniform" />
+                                </Viewbox>
+
+                                <Viewbox Width="12"
+                                         Height="12"
+                                         Visibility="{Binding ShowStopActionIcon, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Path Data="{StaticResource StopIcon}"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          Stretch="Uniform" />
+                                </Viewbox>
+
+                                <Grid Width="14"
+                                      Height="14"
+                                      Visibility="{Binding ShowStoppingIndicator, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Ellipse Width="12"
+                                             Height="12"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                             StrokeThickness="1.6"
+                                             StrokeDashArray="1.4,2.2"
+                                             StrokeStartLineCap="Round"
+                                             StrokeEndLineCap="Round"
+                                             RenderTransformOrigin="0.5,0.5">
+                                        <Ellipse.RenderTransform>
+                                            <RotateTransform />
+                                        </Ellipse.RenderTransform>
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ShowStoppingIndicator}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard x:Name="StoppingSpinnerStoryboard">
+                                                                <Storyboard RepeatBehavior="Forever">
+                                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                                     From="0"
+                                                                                     To="360"
+                                                                                     Duration="0:0:0.9" />
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <DataTrigger.ExitActions>
+                                                            <StopStoryboard BeginStoryboardName="StoppingSpinnerStoryboard" />
+                                                        </DataTrigger.ExitActions>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                </Grid>
+                            </Grid>
                         </Button>
                     </Grid>
 

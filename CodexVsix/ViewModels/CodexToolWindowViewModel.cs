@@ -7,6 +7,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -42,6 +43,10 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private ChatMessage? _currentAssistantMessage;
     private ChatMessage? _currentTransientStatusMessage;
     private bool _isBusy;
+    private bool _isStopping;
+    private bool _hideRecentTasksPreview;
+    private bool _pinRecentTasksPreview;
+    private bool _showExpandedRecentTasksPreview;
     private bool _showHistoryPanel;
     private bool _showSettingsPanel;
     private string _prompt = string.Empty;
@@ -70,6 +75,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private string _selectedSettingsSection = string.Empty;
     private CodexRateLimitSummary _rateLimitSummary = new();
     private CodexEnvironmentStatus _codexEnvironmentStatus = new() { Stage = CodexSetupStage.Checking };
+    private long _conversationStateVersion;
 
     public CodexToolWindowViewModel()
     {
@@ -93,7 +99,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _codexProcessService.ThreadCatalogChanged += HandleThreadCatalogChanged;
 
         SendCommand = new DelegateCommand(Send, () => !IsBusy && IsCodexReady && !string.IsNullOrWhiteSpace(BuildEffectivePrompt()));
-        CancelCommand = new DelegateCommand(Cancel, () => IsBusy);
+        CancelCommand = new DelegateCommand(Cancel, () => IsBusy && !IsStopping);
         SaveSettingsCommand = new DelegateCommand(ApplySettings);
         ClearOutputCommand = new DelegateCommand(() => Output = string.Empty);
         UseSolutionDirectoryCommand = new DelegateCommand(UseSolutionDirectory);
@@ -117,8 +123,10 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         RemoveDetectedPromptSkillCommand = new DelegateCommand(RemoveDetectedPromptSkill);
         InsertSelectedMentionCommand = new DelegateCommand(InsertSelectedMention, () => SelectedMention is not null);
         ReuseHistoryPromptCommand = new DelegateCommand(ReuseHistoryPrompt, () => SelectedHistoryPrompt is not null);
-        NewThreadCommand = new DelegateCommand(StartNewThread, () => !IsBusy);
+        NewThreadCommand = new DelegateCommand(StartNewThread, () => IsCodexReady && !IsStopping);
+        DismissRecentTasksPreviewCommand = new DelegateCommand(DismissRecentTasksPreview);
         RenameThreadCommand = new DelegateCommand(RenameSelectedThread, () => !IsBusy && SelectedThread is not null && !string.IsNullOrWhiteSpace(RenameThreadName));
+        DeleteThreadCommand = new DelegateCommand(DeleteThread, parameter => !IsBusy && parameter is CodexThreadSummary);
         OpenHistoryPanelCommand = new DelegateCommand(OpenHistoryPanel);
         ToggleHistoryPanelCommand = new DelegateCommand(ToggleHistoryPanel);
         ToggleSettingsPanelCommand = new DelegateCommand(ToggleSettingsPanel);
@@ -249,7 +257,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public DelegateCommand InsertSelectedMentionCommand { get; }
     public DelegateCommand ReuseHistoryPromptCommand { get; }
     public DelegateCommand NewThreadCommand { get; }
+    public DelegateCommand DismissRecentTasksPreviewCommand { get; }
     public DelegateCommand RenameThreadCommand { get; }
+    public DelegateCommand DeleteThreadCommand { get; }
     public DelegateCommand OpenHistoryPanelCommand { get; }
     public DelegateCommand ToggleHistoryPanelCommand { get; }
     public DelegateCommand ToggleSettingsPanelCommand { get; }
@@ -298,10 +308,39 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             _isBusy = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(PrimaryActionCommand));
+            OnPropertyChanged(nameof(PrimaryActionTooltip));
+            OnPropertyChanged(nameof(ShowSendActionIcon));
+            OnPropertyChanged(nameof(ShowStopActionIcon));
+            OnPropertyChanged(nameof(ShowStoppingIndicator));
             SendCommand.RaiseCanExecuteChanged();
             CancelCommand.RaiseCanExecuteChanged();
             NewThreadCommand.RaiseCanExecuteChanged();
             RenameThreadCommand.RaiseCanExecuteChanged();
+            DeleteThreadCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    public bool IsStopping
+    {
+        get => _isStopping;
+        private set
+        {
+            if (_isStopping == value)
+            {
+                return;
+            }
+
+            _isStopping = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PrimaryActionCommand));
+            OnPropertyChanged(nameof(PrimaryActionTooltip));
+            OnPropertyChanged(nameof(ShowSendActionIcon));
+            OnPropertyChanged(nameof(ShowStopActionIcon));
+            OnPropertyChanged(nameof(ShowStoppingIndicator));
+            CancelCommand.RaiseCanExecuteChanged();
+            NewThreadCommand.RaiseCanExecuteChanged();
+            DeleteThreadCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -339,7 +378,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public double SidebarWidth => IsSidebarExpanded ? 292d : 0d;
 
-    public bool IsHistoryViewSelected => ShowHistoryPanel;
+    public bool IsHistoryViewSelected => ShowHistoryPanel || (_pinRecentTasksPreview && ShowRecentTasksPreview);
 
     public bool IsSettingsViewSelected => ShowSettingsPanel;
 
@@ -406,6 +445,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             OnPropertyChanged(nameof(CurrentAccountLabel));
             OnPropertyChanged(nameof(CanLogOutAndLogIn));
             SendCommand.RaiseCanExecuteChanged();
+            NewThreadCommand.RaiseCanExecuteChanged();
             RunCodexLoginCommand.RaiseCanExecuteChanged();
             LogOutCommand.RaiseCanExecuteChanged();
             LogOutAndLoginCommand.RaiseCanExecuteChanged();
@@ -843,7 +883,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         || (thread.Subtitle ?? string.Empty).IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0
         || (thread.Preview ?? string.Empty).IndexOf(HistorySearchText, StringComparison.OrdinalIgnoreCase) >= 0);
 
-    public IEnumerable<CodexThreadSummary> RecentThreadsPreview => Threads.Take(3);
+    public IEnumerable<CodexThreadSummary> RecentThreadsPreview => _showExpandedRecentTasksPreview ? Threads : Threads.Take(3);
+
+    public bool IsRecentTasksPreviewExpanded => _showExpandedRecentTasksPreview;
 
     public IEnumerable<SelectionOption> VisibleLanguageOptions => LanguageOptions.Where(option =>
         string.IsNullOrWhiteSpace(LanguageSearchText)
@@ -874,9 +916,25 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public bool HasVisibleLanguageOptions => VisibleLanguageOptions.Any();
 
-    public bool HasMoreThreadsThanPreview => Threads.Count > 3;
+    public bool HasMoreThreadsThanPreview => !_showExpandedRecentTasksPreview && Threads.Count > 3;
 
-    public bool ShowRecentTasksPreview => HasThreads && Messages.Count == 0 && !ShowHistoryPanel && !ShowSettingsPanel;
+    public bool ShowRecentTasksPreview => HasThreads
+        && !ShowHistoryPanel
+        && !ShowSettingsPanel
+        && !_hideRecentTasksPreview
+        && (Messages.Count == 0 || _pinRecentTasksPreview);
+
+    public DelegateCommand PrimaryActionCommand => IsBusy ? CancelCommand : SendCommand;
+
+    public string PrimaryActionTooltip => IsStopping
+        ? Localization.StoppingTooltip
+        : (IsBusy ? Localization.StopTooltip : Localization.SendTooltip);
+
+    public bool ShowSendActionIcon => !IsBusy;
+
+    public bool ShowStopActionIcon => IsBusy && !IsStopping;
+
+    public bool ShowStoppingIndicator => IsBusy && IsStopping;
 
     public string SelectedLanguageTag
     {
@@ -910,6 +968,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             RenameThreadName = value?.Title ?? string.Empty;
             OnPropertyChanged();
             RenameThreadCommand?.RaiseCanExecuteChanged();
+            DeleteThreadCommand?.RaiseCanExecuteChanged();
 
             if (!_suppressThreadSelection && value is not null)
             {
@@ -1001,11 +1060,22 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
 
         EnsureThreadMatchesWorkingDirectory();
+        var shouldAutoNameThread = Messages.Count == 0 && SelectedThread is null;
+
+        if (shouldAutoNameThread)
+        {
+            BeginConversationStateChange();
+            Settings.CurrentThreadId = string.Empty;
+            Settings.LastThreadWorkingDirectory = Settings.WorkingDirectory;
+            _codexProcessService.ResetThread();
+        }
 
         if (string.IsNullOrWhiteSpace(Settings.CurrentThreadId))
         {
             _codexProcessService.ResetThread();
         }
+
+        var conversationStateVersion = CaptureConversationStateVersion();
 
         var ideContextSummary = await CaptureIdeContextSummaryAsync().ConfigureAwait(false);
 
@@ -1015,6 +1085,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         AddUserMessage(promptToSend.Trim());
 
         IsBusy = true;
+        IsStopping = false;
         _cts = new CancellationTokenSource();
         _currentAssistantMessage = null;
         ClearTransientStatusMessage();
@@ -1027,11 +1098,40 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 Settings,
                 AttachedImages.ToList(),
                 ideContextSummary,
-                onOutput: AppendAssistantOutput,
-                onError: AppendStderr,
-                onEventMessage: AddRuntimeEventMessage,
-                onTokenUsage: UpdateTokenUsage,
+                onOutput: text =>
+                {
+                    if (IsConversationStateCurrent(conversationStateVersion))
+                    {
+                        AppendAssistantOutput(text);
+                    }
+                },
+                onError: text =>
+                {
+                    if (IsConversationStateCurrent(conversationStateVersion))
+                    {
+                        AppendStderr(text);
+                    }
+                },
+                onEventMessage: message =>
+                {
+                    if (IsConversationStateCurrent(conversationStateVersion))
+                    {
+                        AddRuntimeEventMessage(message);
+                    }
+                },
+                onTokenUsage: (totalTokens, contextWindow) =>
+                {
+                    if (IsConversationStateCurrent(conversationStateVersion))
+                    {
+                        UpdateTokenUsage(totalTokens, contextWindow);
+                    }
+                },
                 cancellationToken: _cts.Token);
+
+            if (!IsConversationStateCurrent(conversationStateVersion))
+            {
+                return;
+            }
 
             if (exitCode != 0 && _currentAssistantMessage is null)
             {
@@ -1042,26 +1142,83 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             Settings.LastThreadWorkingDirectory = Settings.WorkingDirectory;
             SaveSettings();
             await RefreshThreadsAsync(Settings.CurrentThreadId).ConfigureAwait(false);
+            await EnsureCurrentThreadHasFriendlyNameAsync(shouldAutoNameThread ? promptToSend : null).ConfigureAwait(false);
             await RefreshServerSurfacesAsync().ConfigureAwait(false);
             AppendOutput($"{Environment.NewLine}[exit code: {exitCode}]{Environment.NewLine}");
         }
         catch (OperationCanceledException)
         {
-            AddAssistantMessage(_localization.ExecutionCanceled);
-            AppendOutput($"{Environment.NewLine}[cancelado]{Environment.NewLine}");
+            if (IsConversationStateCurrent(conversationStateVersion))
+            {
+                AddAssistantMessage(_localization.ExecutionCanceled);
+                AppendOutput($"{Environment.NewLine}[cancelado]{Environment.NewLine}");
+            }
         }
         catch (Exception ex)
         {
-            AddAssistantMessage(_localization.ExecutionError + " " + ex.Message);
-            AppendOutput($"{Environment.NewLine}[erro] {ex.Message}{Environment.NewLine}");
+            if (IsConversationStateCurrent(conversationStateVersion))
+            {
+                AddAssistantMessage(_localization.ExecutionError + " " + ex.Message);
+                AppendOutput($"{Environment.NewLine}[erro] {ex.Message}{Environment.NewLine}");
+            }
         }
         finally
         {
-            ClearTransientStatusMessage();
+            if (IsConversationStateCurrent(conversationStateVersion))
+            {
+                ClearTransientStatusMessage();
+            }
+
+            IsStopping = false;
             IsBusy = false;
             _cts?.Dispose();
             _cts = null;
         }
+    }
+
+    private async Task EnsureCurrentThreadHasFriendlyNameAsync(string? prompt)
+    {
+        if (string.IsNullOrWhiteSpace(Settings.CurrentThreadId) || string.IsNullOrWhiteSpace(prompt))
+        {
+            return;
+        }
+
+        CodexThreadSummary? currentThread = null;
+        RunOnUiThread(() =>
+        {
+            currentThread = Threads.FirstOrDefault(thread => string.Equals(thread.ThreadId, Settings.CurrentThreadId, StringComparison.Ordinal));
+        });
+
+        if (currentThread is null || !string.IsNullOrWhiteSpace(currentThread.Name))
+        {
+            return;
+        }
+
+        var friendlyName = BuildFriendlyThreadName(prompt);
+        if (string.IsNullOrWhiteSpace(friendlyName))
+        {
+            return;
+        }
+
+        await _codexProcessService.RenameThreadAsync(Settings, currentThread.ThreadId, friendlyName, CancellationToken.None).ConfigureAwait(false);
+        await RefreshThreadsAsync(currentThread.ThreadId).ConfigureAwait(false);
+    }
+
+    private static string BuildFriendlyThreadName(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return string.Empty;
+        }
+
+        var compact = Regex.Replace(prompt.Replace("\r", " ").Replace("\n", " "), @"\s+", " ").Trim();
+        if (compact.Length <= 96)
+        {
+            return compact;
+        }
+
+        var shortened = compact.Substring(0, 96).TrimEnd();
+        return shortened + "...";
     }
 
     private void Send()
@@ -1120,13 +1277,28 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void Cancel()
     {
+        if (!IsBusy || IsStopping)
+        {
+            return;
+        }
+
+        BeginConversationStateChange();
+        IsStopping = true;
         _approvalDecisionTcs?.TrySetResult(JValue.CreateString("cancel"));
         CurrentApprovalPrompt = null;
         _approvalDecisionTcs = null;
         _userInputDecisionTcs?.TrySetResult(new JObject { ["answers"] = new JObject() });
         CurrentUserInputPrompt = null;
         _userInputDecisionTcs = null;
-        _cts?.Cancel();
+        var cts = _cts;
+        _cts = null;
+        _codexProcessService.CancelActiveTurn();
+        cts?.Cancel();
+        cts?.Dispose();
+        ClearTransientStatusMessage();
+        _currentAssistantMessage = null;
+        IsStopping = false;
+        IsBusy = false;
     }
 
     public void PasteImageFromClipboard()
@@ -1258,6 +1430,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             return;
         }
 
+        BeginConversationStateChange();
         Settings.CurrentThreadId = string.Empty;
         Settings.LastThreadWorkingDirectory = workingDirectory;
         _codexProcessService.ResetThread();
@@ -1368,7 +1541,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             case "minimum":
             case "min":
-                return "minimal";
+            case "minimal":
+                return "low";
             case "maximum":
             case "max":
                 return "xhigh";
@@ -1460,17 +1634,30 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void OpenSettingsPanel()
     {
+        _pinRecentTasksPreview = false;
+        _showExpandedRecentTasksPreview = false;
         SelectedSettingsSection = string.Empty;
         ShowSettingsPanel = true;
         ShowHistoryPanel = false;
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+        OnPropertyChanged(nameof(RecentThreadsPreview));
+        OnPropertyChanged(nameof(HasMoreThreadsThanPreview));
+        OnPropertyChanged(nameof(IsRecentTasksPreviewExpanded));
         OnPropertyChanged(nameof(IsHistoryViewSelected));
         OnPropertyChanged(nameof(IsSettingsViewSelected));
     }
 
     private void OpenHistoryPanel()
     {
-        ShowHistoryPanel = true;
+        _hideRecentTasksPreview = false;
+        _pinRecentTasksPreview = true;
+        _showExpandedRecentTasksPreview = true;
+        ShowHistoryPanel = false;
         ShowSettingsPanel = false;
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+        OnPropertyChanged(nameof(RecentThreadsPreview));
+        OnPropertyChanged(nameof(HasMoreThreadsThanPreview));
+        OnPropertyChanged(nameof(IsRecentTasksPreviewExpanded));
         OnPropertyChanged(nameof(IsHistoryViewSelected));
         OnPropertyChanged(nameof(IsSettingsViewSelected));
     }
@@ -1657,13 +1844,24 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void ToggleHistoryPanel()
     {
-        var nextState = !ShowHistoryPanel;
-        ShowHistoryPanel = nextState;
+        var nextState = !_pinRecentTasksPreview || !ShowRecentTasksPreview;
+        _pinRecentTasksPreview = nextState;
+        _hideRecentTasksPreview = !nextState;
+        if (!nextState)
+        {
+            _showExpandedRecentTasksPreview = false;
+        }
+
+        ShowHistoryPanel = false;
         if (nextState)
         {
             ShowSettingsPanel = false;
         }
 
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+        OnPropertyChanged(nameof(RecentThreadsPreview));
+        OnPropertyChanged(nameof(HasMoreThreadsThanPreview));
+        OnPropertyChanged(nameof(IsRecentTasksPreviewExpanded));
         OnPropertyChanged(nameof(IsHistoryViewSelected));
         OnPropertyChanged(nameof(IsSettingsViewSelected));
     }
@@ -1671,6 +1869,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private void ToggleSettingsPanel()
     {
         var nextState = !ShowSettingsPanel;
+        _pinRecentTasksPreview = false;
+        _showExpandedRecentTasksPreview = false;
         ShowSettingsPanel = nextState;
         if (nextState)
         {
@@ -1678,6 +1878,10 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             SelectedSettingsSection = string.Empty;
         }
 
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+        OnPropertyChanged(nameof(RecentThreadsPreview));
+        OnPropertyChanged(nameof(HasMoreThreadsThanPreview));
+        OnPropertyChanged(nameof(IsRecentTasksPreviewExpanded));
         OnPropertyChanged(nameof(IsHistoryViewSelected));
         OnPropertyChanged(nameof(IsSettingsViewSelected));
     }
@@ -1686,6 +1890,12 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         ShowHistoryPanel = false;
         ShowSettingsPanel = false;
+        _pinRecentTasksPreview = false;
+        _showExpandedRecentTasksPreview = false;
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+        OnPropertyChanged(nameof(RecentThreadsPreview));
+        OnPropertyChanged(nameof(HasMoreThreadsThanPreview));
+        OnPropertyChanged(nameof(IsRecentTasksPreviewExpanded));
         OnPropertyChanged(nameof(IsHistoryViewSelected));
         OnPropertyChanged(nameof(IsSettingsViewSelected));
     }
@@ -1911,6 +2121,10 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private async Task InitializeAsync()
     {
+        Settings.CurrentThreadId = string.Empty;
+        Settings.LastThreadWorkingDirectory = Settings.WorkingDirectory;
+        _codexProcessService.ResetThread();
+
         await RefreshCodexStatusAsync().ConfigureAwait(false);
         if (!IsCodexReady)
         {
@@ -1919,13 +2133,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
 
         await RefreshModelOptionsAsync().ConfigureAwait(false);
-        await RefreshThreadsAsync(Settings.CurrentThreadId).ConfigureAwait(false);
+        await RefreshThreadsAsync(null).ConfigureAwait(false);
         await RefreshServerSurfacesAsync(forceSkillReload: true).ConfigureAwait(false);
-
-        if (!string.IsNullOrWhiteSpace(Settings.CurrentThreadId))
-        {
-            await OpenThreadAsync(Settings.CurrentThreadId).ConfigureAwait(false);
-        }
     }
 
     private async Task RefreshCodexStatusAsync()
@@ -2115,10 +2324,12 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             return;
         }
 
+        var conversationStateVersion = BeginConversationStateChange();
+
         try
         {
             var conversation = await _codexProcessService.LoadThreadConversationAsync(Settings, threadId, CancellationToken.None).ConfigureAwait(false);
-            if (conversation is null)
+            if (conversation is null || !IsConversationStateCurrent(conversationStateVersion))
             {
                 return;
             }
@@ -2144,17 +2355,33 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
         catch (Exception ex)
         {
-            AppendOutput(_localization.LoadTopicsErrorPrefix + ex.Message + Environment.NewLine);
+            if (IsConversationStateCurrent(conversationStateVersion))
+            {
+                AppendOutput(_localization.LoadTopicsErrorPrefix + ex.Message + Environment.NewLine);
+            }
         }
     }
 
     private void StartNewThread()
     {
-        if (IsBusy)
+        if (IsStopping)
         {
             return;
         }
 
+        if (IsBusy)
+        {
+            Cancel();
+        }
+
+        BeginConversationStateChange();
+        _hideRecentTasksPreview = true;
+        _pinRecentTasksPreview = false;
+        _showExpandedRecentTasksPreview = false;
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+        OnPropertyChanged(nameof(RecentThreadsPreview));
+        OnPropertyChanged(nameof(HasMoreThreadsThanPreview));
+        OnPropertyChanged(nameof(IsRecentTasksPreviewExpanded));
         _approvalDecisionTcs?.TrySetResult(JValue.CreateString("cancel"));
         _approvalDecisionTcs = null;
         CurrentApprovalPrompt = null;
@@ -2179,6 +2406,23 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ThreadHelper.JoinableTaskFactory.RunAsync(() => RefreshThreadsAsync(null));
     }
 
+    private void DismissRecentTasksPreview()
+    {
+        if (_hideRecentTasksPreview)
+        {
+            return;
+        }
+
+        _hideRecentTasksPreview = true;
+        _pinRecentTasksPreview = false;
+        _showExpandedRecentTasksPreview = false;
+        OnPropertyChanged(nameof(ShowRecentTasksPreview));
+        OnPropertyChanged(nameof(RecentThreadsPreview));
+        OnPropertyChanged(nameof(HasMoreThreadsThanPreview));
+        OnPropertyChanged(nameof(IsRecentTasksPreviewExpanded));
+        OnPropertyChanged(nameof(IsHistoryViewSelected));
+    }
+
     private void RenameSelectedThread()
     {
         var selectedThread = SelectedThread;
@@ -2194,6 +2438,47 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             {
                 await _codexProcessService.RenameThreadAsync(Settings, selectedThread.ThreadId, newName, CancellationToken.None).ConfigureAwait(false);
                 await RefreshThreadsAsync(selectedThread.ThreadId).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AppendOutput(_localization.LoadTopicsErrorPrefix + ex.Message + Environment.NewLine);
+            }
+        });
+    }
+
+    private void DeleteThread(object? parameter)
+    {
+        if (IsBusy || parameter is not CodexThreadSummary thread)
+        {
+            return;
+        }
+
+        ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+        {
+            try
+            {
+                await _codexProcessService.ArchiveThreadAsync(Settings, thread.ThreadId, CancellationToken.None).ConfigureAwait(false);
+
+                if (string.Equals(Settings.CurrentThreadId, thread.ThreadId, StringComparison.Ordinal))
+                {
+                    BeginConversationStateChange();
+                    Settings.CurrentThreadId = string.Empty;
+                    Settings.LastThreadWorkingDirectory = Settings.WorkingDirectory;
+                    _codexProcessService.ResetThread();
+                    SaveSettings();
+
+                    RunOnUiThread(() =>
+                    {
+                        _suppressThreadSelection = true;
+                        SelectedThread = null;
+                        _suppressThreadSelection = false;
+                        RenameThreadName = string.Empty;
+                        Messages.Clear();
+                        Output = string.Empty;
+                    });
+                }
+
+                await RefreshThreadsAsync(Settings.CurrentThreadId).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -3009,6 +3294,21 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         RunOnUiThread(() => _output += text);
         RunOnUiThread(() => OnPropertyChanged(nameof(Output)));
+    }
+
+    private long CaptureConversationStateVersion()
+    {
+        return Interlocked.Read(ref _conversationStateVersion);
+    }
+
+    private long BeginConversationStateChange()
+    {
+        return Interlocked.Increment(ref _conversationStateVersion);
+    }
+
+    private bool IsConversationStateCurrent(long version)
+    {
+        return CaptureConversationStateVersion() == version;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

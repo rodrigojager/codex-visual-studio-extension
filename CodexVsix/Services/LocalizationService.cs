@@ -31,12 +31,12 @@ public sealed class LocalizationService
         ["LanguageSubtitle"] = "Override automatic language detection for the extension UI.",
         ["LanguageAutoOption"] = "Automatic",
         ["CurrentLanguageLabel"] = "Current language",
-        ["HistorySearchPlaceholder"] = "Search recent tasks",
-        ["AllTasksLabel"] = "All tasks",
-        ["ViewAllTasksLabel"] = "View all",
-        ["TasksTitle"] = "Tasks",
-        ["RecentTasksTitle"] = "Recent tasks",
-        ["NoTasksDetected"] = "No recent tasks yet.",
+        ["HistorySearchPlaceholder"] = "Search conversation history",
+        ["AllTasksLabel"] = "All history",
+        ["ViewAllTasksLabel"] = "View all history",
+        ["TasksTitle"] = "History",
+        ["RecentTasksTitle"] = "Recent history",
+        ["NoTasksDetected"] = "No conversation history yet.",
         ["PersonalAccountLabel"] = "Personal account",
         ["OpenAgentSettingsLabel"] = "Open Agent settings",
         ["ReadDocsLabel"] = "Read docs",
@@ -114,8 +114,10 @@ public sealed class LocalizationService
         ["AddAttachmentTooltip"] = "Attach image or file",
         ["PasteImageTooltip"] = "Paste image from clipboard",
         ["SendTooltip"] = "Send prompt",
-        ["HistoryTooltip"] = "Open topics",
+        ["HistoryTooltip"] = "Open history",
         ["SettingsTooltip"] = "Open settings",
+        ["StopTooltip"] = "Stop response",
+        ["StoppingTooltip"] = "Stopping response",
         ["SetupCheckingTitle"] = "Checking Codex environment",
         ["SetupCheckingSummary"] = "Validating executable, authentication, and local configuration.",
         ["SetupMissingExecutableTitle"] = "Codex CLI not found",
@@ -189,12 +191,12 @@ public sealed class LocalizationService
         ["NewTopicButton"] = "Novo tópico",
         ["RenameTopicButton"] = "Renomear",
         ["RenameTopicPlaceholder"] = "Renomear tópico selecionado",
-        ["TasksTitle"] = "Tarefas",
-        ["RecentTasksTitle"] = "Tarefas recentes",
-        ["HistorySearchPlaceholder"] = "Procurar em tarefas recentes",
-        ["AllTasksLabel"] = "Todas as tarefas",
-        ["ViewAllTasksLabel"] = "Ver todas",
-        ["NoTasksDetected"] = "Nenhuma tarefa recente ainda.",
+        ["TasksTitle"] = "Historico",
+        ["RecentTasksTitle"] = "Historico recente",
+        ["HistorySearchPlaceholder"] = "Procurar no historico",
+        ["AllTasksLabel"] = "Todo o historico",
+        ["ViewAllTasksLabel"] = "Ver historico completo",
+        ["NoTasksDetected"] = "Nenhum historico ainda.",
         ["PersonalAccountLabel"] = "Conta pessoal",
         ["OpenAgentSettingsLabel"] = "Abrir configurações do agente",
         ["ReadDocsLabel"] = "Ler documentação",
@@ -220,8 +222,10 @@ public sealed class LocalizationService
         ["AddAttachmentTooltip"] = "Anexar imagem ou arquivo",
         ["PasteImageTooltip"] = "Colar imagem da área de transferência",
         ["SendTooltip"] = "Enviar prompt",
-        ["HistoryTooltip"] = "Abrir tópicos",
+        ["HistoryTooltip"] = "Abrir historico",
         ["SettingsTooltip"] = "Abrir configurações",
+        ["StopTooltip"] = "Parar resposta",
+        ["StoppingTooltip"] = "Parando resposta",
         ["LocalButton"] = "Local",
         ["RemoveAttachmentHoverLabel"] = "Remover",
         ["ApprovalCommandTitle"] = "Aprovação necessária para executar comando",
@@ -288,7 +292,9 @@ public sealed class LocalizationService
         ["AddAttachmentTooltip"] = "Adjuntar imagen o archivo",
         ["PasteImageTooltip"] = "Pegar imagen del portapapeles",
         ["SendTooltip"] = "Enviar prompt",
-        ["HistoryTooltip"] = "Abrir temas",
+        ["HistoryTooltip"] = "Abrir historial",
+        ["StopTooltip"] = "Detener respuesta",
+        ["StoppingTooltip"] = "Deteniendo respuesta",
         ["SettingsTooltip"] = "Abrir configuración",
         ["LocalButton"] = "Local",
         ["RemoveAttachmentHoverLabel"] = "Quitar",
@@ -352,7 +358,9 @@ public sealed class LocalizationService
         ["AddAttachmentTooltip"] = "Joindre une image ou un fichier",
         ["PasteImageTooltip"] = "Coller l'image du presse-papiers",
         ["SendTooltip"] = "Envoyer le prompt",
-        ["HistoryTooltip"] = "Ouvrir les sujets",
+        ["HistoryTooltip"] = "Ouvrir l'historique",
+        ["StopTooltip"] = "Arreter la reponse",
+        ["StoppingTooltip"] = "Arret en cours",
         ["SettingsTooltip"] = "Ouvrir la configuration",
         ["LocalButton"] = "Local",
         ["RemoveAttachmentHoverLabel"] = "Retirer",
@@ -416,7 +424,9 @@ public sealed class LocalizationService
         ["AddAttachmentTooltip"] = "Bild oder Datei anhängen",
         ["PasteImageTooltip"] = "Bild aus der Zwischenablage einfügen",
         ["SendTooltip"] = "Prompt senden",
-        ["HistoryTooltip"] = "Themen öffnen",
+        ["HistoryTooltip"] = "Verlauf offnen",
+        ["StopTooltip"] = "Antwort stoppen",
+        ["StoppingTooltip"] = "Antwort wird gestoppt",
         ["SettingsTooltip"] = "Einstellungen öffnen",
         ["LocalButton"] = "Lokal",
         ["RemoveAttachmentHoverLabel"] = "Entfernen",
@@ -494,12 +504,12 @@ public sealed class LocalizationService
     public string LanguageSubtitle => GetLocalizedString("LanguageSubtitle", "Substitua a detecção automática de idioma da interface.");
     public string LanguageAutoOption => GetLocalizedString("LanguageAutoOption", "Automático");
     public string CurrentLanguageLabel => GetLocalizedString("CurrentLanguageLabel", "Idioma atual");
-    public string HistorySearchPlaceholder => GetLocalizedString("HistorySearchPlaceholder", "Procurar em tarefas recentes");
-    public string AllTasksLabel => GetLocalizedString("AllTasksLabel", "Todas as tarefas");
-    public string ViewAllTasksLabel => GetLocalizedString("ViewAllTasksLabel", "Ver todas");
-    public string TasksTitle => GetLocalizedString("TasksTitle", "Tarefas");
-    public string RecentTasksTitle => GetLocalizedString("RecentTasksTitle", "Tarefas recentes");
-    public string NoTasksDetected => GetLocalizedString("NoTasksDetected", "Nenhuma tarefa recente ainda.");
+    public string HistorySearchPlaceholder => GetLocalizedString("HistorySearchPlaceholder", "Procurar no historico");
+    public string AllTasksLabel => GetLocalizedString("AllTasksLabel", "Todo o historico");
+    public string ViewAllTasksLabel => GetLocalizedString("ViewAllTasksLabel", "Ver historico completo");
+    public string TasksTitle => GetLocalizedString("TasksTitle", "Historico");
+    public string RecentTasksTitle => GetLocalizedString("RecentTasksTitle", "Historico recente");
+    public string NoTasksDetected => GetLocalizedString("NoTasksDetected", "Nenhum historico ainda.");
     public string PersonalAccountLabel => GetLocalizedString("PersonalAccountLabel", "Conta pessoal");
     public string OpenAgentSettingsLabel => GetLocalizedString("OpenAgentSettingsLabel", "Abrir configurações do agente");
     public string ReadDocsLabel => GetLocalizedString("ReadDocsLabel", "Ler documentação");
@@ -578,6 +588,8 @@ public sealed class LocalizationService
     public string AddAttachmentTooltip => Get("AddAttachmentTooltip");
     public string PasteImageTooltip => Get("PasteImageTooltip");
     public string SendTooltip => Get("SendTooltip");
+    public string StopTooltip => GetLocalizedString("StopTooltip", "Parar resposta");
+    public string StoppingTooltip => GetLocalizedString("StoppingTooltip", "Parando resposta");
     public string HistoryTooltip => Get("HistoryTooltip");
     public string SettingsTooltip => Get("SettingsTooltip");
     public string SetupCheckingTitle => GetLocalizedString("SetupCheckingTitle", "Verificando ambiente do Codex");
@@ -630,7 +642,6 @@ public sealed class LocalizationService
     {
         return new[]
         {
-            new SelectionOption(Get("ReasoningMinimal"), "minimal"),
             new SelectionOption(Get("ReasoningLow"), "low"),
             new SelectionOption(Get("ReasoningMedium"), "medium"),
             new SelectionOption(Get("ReasoningHigh"), "high"),

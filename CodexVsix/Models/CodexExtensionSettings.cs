@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace CodexVsix.Models;
 
@@ -17,7 +18,10 @@ public sealed class CodexExtensionSettings
     public string AdditionalArguments { get; set; } = "";
     public string EnvironmentVariables { get; set; } = "";
     public string RawTomlOverrides { get; set; } = "";
+    [JsonIgnore]
     public string CurrentThreadId { get; set; } = "";
+
+    [JsonIgnore]
     public string LastThreadWorkingDirectory { get; set; } = "";
     public List<string> PromptHistory { get; set; } = new();
     public List<CodexManagedMcpServer> ManagedMcpServers { get; set; } = new();
