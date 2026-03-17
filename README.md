@@ -1,25 +1,30 @@
-# Codex for Visual Studio 2026
+# Codex for Visual Studio
 
-Extensão VSIX para Visual Studio 2026 com painel lateral para integração com o Codex CLI.
+VSIX extension that adds a docked Codex tool window to Visual Studio 2022 and 2026.
 
-## Recursos incluídos
+## Features
 
-- Tool Window lateral no Visual Studio 2026
-- Campo de prompt e saída
-- Seleção de modelo
-- Seleção de reasoning/thinking effort (`minimal`, `low`, `medium`, `high`, `xhigh`)
-- Seleção de verbosity (`low`, `medium`, `high`)
-- Seleção de `approval_policy` e `sandbox_mode`
-- Persistência local de configurações
-- Botão para usar a pasta da solução aberta como working directory
-- Botão para abrir ou editar `~/.codex/config.toml`
-- Histórico local de prompts
-- Anexo de imagem por clipboard ou seletor de arquivo
-- Suporte a `--image` ao chamar o Codex CLI
-- Busca de arquivos da solução enquanto o usuário digita `@arquivo` no final do prompt
+- Docked chat-style tool window inside Visual Studio
+- Model selection
+- Reasoning / thinking effort selection (`minimal`, `low`, `medium`, `high`, `xhigh`)
+- Verbosity selection (`low`, `medium`, `high`)
+- `approval_policy` and `sandbox_mode` selection
+- Local settings persistence
+- Use the open solution folder as the working directory
+- Open or edit `~/.codex/config.toml`
+- Local prompt history
+- Image attachment from the clipboard or file picker
+- `--image` support when calling the installed Codex runtime
+- Solution-aware `@file` search while typing
 
-## Observações
+## Requirements
 
-- O empacotamento da VSIX no CI usa `MSBuild` completo e habilita a geração do pacote com a propriedade `BuildVsixPackage=true`.
-- A busca com `@` foi implementada na UI da extensão; ela sugere arquivos da solução e insere o caminho relativo no prompt.
-- O suporte a imagem depende de o `codex` instalado aceitar `--image`.
+- Visual Studio 2022 or Visual Studio 2026, 64-bit
+- Authentication for Codex on the machine
+
+## Notes
+
+- CI packaging uses full `MSBuild` and enables `BuildVsixPackage=true`.
+- The extension resolves the installed Codex executable from the configured path or the machine environment.
+- The `@file` picker is implemented in the extension UI and inserts relative paths into the prompt.
+- Image support depends on the installed `codex` runtime supporting `--image`.

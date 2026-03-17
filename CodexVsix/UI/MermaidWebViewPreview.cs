@@ -635,7 +635,8 @@ internal sealed class MermaidWebViewPreview : Grid
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(MermaidBundleResourceName);
         if (stream is null)
         {
-            throw new InvalidOperationException($"Recurso '{MermaidBundleResourceName}' nao encontrado.");
+            var localization = new LocalizationService();
+            throw new InvalidOperationException(string.Format(localization.Culture, localization.MermaidBundleNotFoundFormat, MermaidBundleResourceName));
         }
 
         using var reader = new StreamReader(stream);

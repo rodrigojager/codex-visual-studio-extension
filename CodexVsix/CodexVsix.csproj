@@ -93,6 +93,9 @@
     <VSCTCompile Include="Commands.vsct">
       <ResourceName>Menus.ctmenu</ResourceName>
     </VSCTCompile>
+    <Content Include="Resources\MarketplaceIcon.png">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
     <EmbeddedResource Include="UI\Assets\mermaid.min.js">
       <LogicalName>CodexVsix.UI.Assets.mermaid.min.js</LogicalName>
     </EmbeddedResource>

@@ -1,23 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <Metadata>
-    <Identity Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61" Version="1.1.7" Language="pt-BR" Publisher="Rodrigo Jager" />
-    <DisplayName>Codex for Visual Studio 2026</DisplayName>
-    <Description xml:space="preserve">Abre um painel lateral no Visual Studio 2026 para interagir com o Codex.</Description>
+    <Identity Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61" Version="1.1.8" Language="en-US" Publisher="Rodrigo Jager" />
+    <DisplayName>Codex for Visual Studio</DisplayName>
+    <Description xml:space="preserve">Runs Codex inside a docked Visual Studio tool window with chat, approvals, image attachments, and solution-aware context.</Description>
+    <MoreInfo>https://github.com/rodrigojager/codex-visual-studio-extension</MoreInfo>
+    <GettingStartedGuide>https://github.com/rodrigojager/codex-visual-studio-extension#readme</GettingStartedGuide>
+    <ReleaseNotes>https://github.com/rodrigojager/codex-visual-studio-extension/releases</ReleaseNotes>
+    <Icon>Resources\MarketplaceIcon.png</Icon>
+    <Tags>codex;openai;ai;assistant;chat;visual studio;tool window</Tags>
   </Metadata>
   <Installation>
-    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[18.0,19.0)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
-    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[18.0,19.0)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0,)">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
-    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[18.0,19.0)">
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0,)">
       <ProductArchitecture>amd64</ProductArchitecture>
     </InstallationTarget>
   </Installation>
   <Prerequisites>
-    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[18.0,19.0)" DisplayName="Visual Studio core editor" />
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,)" DisplayName="Visual Studio core editor" />
   </Prerequisites>
   <Dependencies>
     <Dependency Id="Microsoft.Framework.NDP" DisplayName=".NET Framework" Version="[4.7.2,)" />

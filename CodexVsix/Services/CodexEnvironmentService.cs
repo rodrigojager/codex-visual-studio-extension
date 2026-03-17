@@ -13,22 +13,22 @@ namespace CodexVsix.Services;
 
 public sealed class CodexEnvironmentService
 {
-    public const string DefaultInstallCommand = "npm install -g @openai/codex";
+    public const string FallbackInstallCommand = "npm install -g @openai/codex";
 
     public async Task<CodexEnvironmentStatus> InspectAsync(CodexExtensionSettings settings, CancellationToken cancellationToken)
     {
         var localization = new LocalizationService(settings.LanguageOverride);
-        var configuredExecutablePath = ResolveConfiguredExecutablePath(settings.CodexExecutablePath);
+        var configuredExecutablePath = CodexExecutableResolver.NormalizeConfiguredExecutablePath(settings.CodexExecutablePath);
         var status = new CodexEnvironmentStatus
         {
             Stage = CodexSetupStage.Checking,
             ConfiguredExecutablePath = configuredExecutablePath,
-            AuthFilePath = GetAuthFilePath()
+            AuthFilePath = GetAuthFilePath(settings.EnvironmentVariables)
         };
 
         try
         {
-            var resolvedExecutablePath = ResolveExecutableLocation(configuredExecutablePath);
+            var resolvedExecutablePath = CodexExecutableResolver.ResolveExecutableLocation(configuredExecutablePath, settings.EnvironmentVariables);
             if (string.IsNullOrWhiteSpace(resolvedExecutablePath))
             {
                 status.Stage = CodexSetupStage.MissingExecutable;
@@ -46,6 +46,14 @@ public sealed class CodexEnvironmentService
             }
 
             status.Version = version.Detail;
+            var appServer = await TryValidateAppServerAsync(resolvedExecutablePath, localization, cancellationToken).ConfigureAwait(false);
+            if (!appServer.Success)
+            {
+                status.Stage = CodexSetupStage.Error;
+                status.ErrorDetail = appServer.Detail;
+                return status;
+            }
+
             status.HasApiKey = HasApiKey(settings.EnvironmentVariables) || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
             status.HasAuthFile = HasUsableAuthFile(status.AuthFilePath);
             status.AccountEmail = status.HasAuthFile ? TryReadAccountEmail(status.AuthFilePath) : string.Empty;
@@ -68,6 +76,17 @@ public sealed class CodexEnvironmentService
     {
         if (string.IsNullOrWhiteSpace(executablePath))
         {
+            return;
+        }
+
+        if (IsPowerShellScript(executablePath))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = ResolvePowerShellHost(),
+                Arguments = "-NoExit -ExecutionPolicy Bypass -File " + QuoteArgument(executablePath) + " login",
+                UseShellExecute = true
+            });
             return;
         }
 
@@ -110,110 +129,51 @@ public sealed class CodexEnvironmentService
         File.Delete(path);
     }
 
-    public string GetAuthFilePath()
+    public string GetAuthFilePath(string? environmentVariables = null)
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".codex",
-            "auth.json");
-    }
-
-    private static string ResolveConfiguredExecutablePath(string? configuredPath)
-    {
-        var trimmed = string.IsNullOrWhiteSpace(configuredPath)
-            ? "codex.cmd"
-            : configuredPath.Trim();
-
-        if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-        {
-            return trimmed;
-        }
-
-        return string.Equals(trimmed, "codex", StringComparison.OrdinalIgnoreCase)
-            ? "codex.cmd"
-            : trimmed;
-    }
-
-    private static string ResolveExecutableLocation(string configuredPath)
-    {
-        if (string.IsNullOrWhiteSpace(configuredPath))
-        {
-            return string.Empty;
-        }
-
-        if (Path.IsPathRooted(configuredPath) && File.Exists(configuredPath))
-        {
-            return configuredPath;
-        }
-
-        if ((configuredPath.Contains("\\") || configuredPath.Contains("/")) && File.Exists(configuredPath))
-        {
-            return Path.GetFullPath(configuredPath);
-        }
-
-        var pathValue = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        var pathEntries = pathValue.Split(Path.PathSeparator)
-            .Where(entry => !string.IsNullOrWhiteSpace(entry));
-
-        var candidateNames = BuildCandidateNames(configuredPath);
-        foreach (var directory in pathEntries)
-        {
-            var normalizedDirectory = directory.Trim();
-            foreach (var candidateName in candidateNames)
-            {
-                var candidatePath = Path.Combine(normalizedDirectory, candidateName);
-                if (File.Exists(candidatePath))
-                {
-                    return candidatePath;
-                }
-            }
-        }
-
-        return string.Empty;
-    }
-
-    private static string[] BuildCandidateNames(string configuredPath)
-    {
-        if (Environment.OSVersion.Platform != PlatformID.Win32NT)
-        {
-            return new[] { configuredPath };
-        }
-
-        var extension = Path.GetExtension(configuredPath);
-        if (!string.IsNullOrWhiteSpace(extension))
-        {
-            return new[] { configuredPath };
-        }
-
-        return new[]
-        {
-            configuredPath,
-            configuredPath + ".cmd",
-            configuredPath + ".bat",
-            configuredPath + ".exe"
-        };
+        return Path.Combine(CodexEnvironmentPathHelper.GetCodexHomeDirectory(environmentVariables), "auth.json");
     }
 
     private static async Task<(bool Success, string Detail)> TryGetVersionAsync(string executablePath, LocalizationService localization, CancellationToken cancellationToken)
     {
+        var probe = await RunProbeAsync(executablePath, "--version", localization.SetupErrorSummary, cancellationToken).ConfigureAwait(false);
+        if (!probe.Success)
+        {
+            return probe;
+        }
+
+        var versionText = FirstNonEmptyLine(probe.Detail);
+        return (true, string.IsNullOrWhiteSpace(versionText) ? localization.CodexDetectedLabel : versionText);
+    }
+
+    private static async Task<(bool Success, string Detail)> TryValidateAppServerAsync(string executablePath, LocalizationService localization, CancellationToken cancellationToken)
+    {
+        var probe = await RunProbeAsync(
+            executablePath,
+            "app-server --help",
+            localization.AppServerValidationFailed,
+            cancellationToken).ConfigureAwait(false);
+
+        if (probe.Success)
+        {
+            return probe;
+        }
+
+        return (false, localization.AppServerUnsupported + Environment.NewLine + probe.Detail);
+    }
+
+    private static async Task<(bool Success, string Detail)> RunProbeAsync(string executablePath, string arguments, string fallbackError, CancellationToken cancellationToken)
+    {
         using var process = new Process
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = executablePath,
-                Arguments = "--version",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
+            StartInfo = CreateProbeStartInfo(executablePath, arguments)
         };
 
         try
         {
             if (!process.Start())
             {
-                return (false, localization.SetupMissingExecutableSummary);
+                return (false, fallbackError);
             }
         }
         catch (Exception ex)
@@ -228,7 +188,7 @@ public sealed class CodexEnvironmentService
         if (!exited)
         {
             TryTerminateProcess(process);
-            return (false, localization.SetupErrorSummary);
+            return (false, fallbackError);
         }
 
         var output = await outputTask.ConfigureAwait(false);
@@ -237,11 +197,55 @@ public sealed class CodexEnvironmentService
         if (process.ExitCode != 0)
         {
             var error = string.IsNullOrWhiteSpace(errorText) ? output : errorText;
-            return (false, string.IsNullOrWhiteSpace(error) ? localization.SetupErrorSummary : error.Trim());
+            return (false, string.IsNullOrWhiteSpace(error) ? fallbackError : error.Trim());
         }
 
-        var versionText = FirstNonEmptyLine(output);
-        return (true, string.IsNullOrWhiteSpace(versionText) ? localization.CodexDetectedLabel : versionText);
+        return (true, string.IsNullOrWhiteSpace(output) ? errorText : output);
+    }
+
+    private static ProcessStartInfo CreateProbeStartInfo(string executablePath, string arguments)
+    {
+        if (IsPowerShellScript(executablePath))
+        {
+            return new ProcessStartInfo
+            {
+                FileName = ResolvePowerShellHost(),
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -File " + QuoteArgument(executablePath) + (string.IsNullOrWhiteSpace(arguments) ? string.Empty : " " + arguments),
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+
+        if (!RequiresCommandShell(executablePath))
+        {
+            return new ProcessStartInfo
+            {
+                FileName = executablePath,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+
+        var commandShell = Environment.GetEnvironmentVariable("ComSpec");
+        if (string.IsNullOrWhiteSpace(commandShell))
+        {
+            commandShell = "cmd.exe";
+        }
+
+        return new ProcessStartInfo
+        {
+            FileName = commandShell,
+            Arguments = "/d /s /c \"" + QuoteForCommandShell(executablePath) + (string.IsNullOrWhiteSpace(arguments) ? string.Empty : " " + arguments) + "\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
     }
 
     private static async Task<bool> WaitForExitAsync(Process process, int timeoutMilliseconds, CancellationToken cancellationToken)
@@ -383,6 +387,25 @@ public sealed class CodexEnvironmentService
         return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
+    private static bool RequiresCommandShell(string executablePath)
+    {
+        if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+        {
+            return false;
+        }
+
+        var extension = Path.GetExtension(executablePath);
+        return string.IsNullOrEmpty(extension)
+            || extension.Equals(".cmd", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".bat", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPowerShellScript(string executablePath)
+    {
+        return Environment.OSVersion.Platform == PlatformID.Win32NT
+            && Path.GetExtension(executablePath).Equals(".ps1", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void TryTerminateProcess(Process process)
     {
         try
@@ -396,5 +419,19 @@ public sealed class CodexEnvironmentService
         catch
         {
         }
+    }
+
+    private static string ResolvePowerShellHost()
+    {
+        var systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        var windowsPowerShell = Path.Combine(systemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+        return File.Exists(windowsPowerShell)
+            ? windowsPowerShell
+            : "powershell.exe";
+    }
+
+    private static string QuoteArgument(string value)
+    {
+        return "\"" + (value ?? string.Empty).Replace("\"", "\\\"") + "\"";
     }
 }

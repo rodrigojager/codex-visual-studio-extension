@@ -43,6 +43,7 @@ public sealed class CodexProcessService : IDisposable
     private string? _threadConfigKey;
     private string? _serverConfigKey;
     private string? _skillsCacheKey;
+    private string? _languageOverride;
     private bool _threadLoaded;
     private long _nextRequestId;
 
@@ -474,8 +475,7 @@ public sealed class CodexProcessService : IDisposable
             cancellationToken).ConfigureAwait(false);
 
         var homeSkillsDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".codex",
+            CodexEnvironmentPathHelper.GetCodexHomeDirectory(settings.EnvironmentVariables),
             "skills");
 
         var summaries = new List<CodexSkillSummary>();
@@ -632,6 +632,7 @@ public sealed class CodexProcessService : IDisposable
 
     private async Task EnsureServerReadyAsync(CodexExtensionSettings settings, string workingDirectory, CancellationToken cancellationToken)
     {
+        _languageOverride = settings.LanguageOverride;
         var desiredServerConfig = BuildServerConfigKey(settings);
         var shouldStart = false;
         var needsRestart = false;
@@ -791,7 +792,12 @@ public sealed class CodexProcessService : IDisposable
 
     private void StartServerProcess(CodexExtensionSettings settings, string workingDirectory)
     {
-        var executablePath = ResolveExecutablePath(settings.CodexExecutablePath);
+        var executablePath = CodexExecutableResolver.ResolveExecutableLocation(settings.CodexExecutablePath, settings.EnvironmentVariables);
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            executablePath = CodexExecutableResolver.NormalizeConfiguredExecutablePath(settings.CodexExecutablePath);
+        }
+
         var arguments = BuildServerArguments(settings);
         var startInfo = BuildStartInfo(executablePath, arguments, workingDirectory);
 
@@ -813,7 +819,7 @@ public sealed class CodexProcessService : IDisposable
 
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         process.Start();
-        process.Exited += (_, _) => FailPendingOperations("Codex app server was closed unexpectedly.");
+        process.Exited += (_, _) => FailPendingOperations(GetLocalization().AppServerClosedUnexpectedly);
 
         var serverInput = new StreamWriter(process.StandardInput.BaseStream, new UTF8Encoding(false), 1024, true)
         {
@@ -849,7 +855,7 @@ public sealed class CodexProcessService : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    PublishError("[app-server] " + ex.Message + Environment.NewLine);
+                    PublishError("[" + GetLocalization().OutputTagAppServer + "] " + ex.Message + Environment.NewLine);
                 }
             }
         }
@@ -874,7 +880,7 @@ public sealed class CodexProcessService : IDisposable
         }
         catch (Exception ex)
         {
-            PublishError("[stderr] " + ex.Message + Environment.NewLine);
+            PublishError("[" + GetLocalization().OutputTagStderr + "] " + ex.Message + Environment.NewLine);
         }
     }
 
@@ -887,13 +893,13 @@ public sealed class CodexProcessService : IDisposable
         }
         catch
         {
-            PublishError("[app-server] " + rawMessage + Environment.NewLine);
+            PublishError("[" + GetLocalization().OutputTagAppServer + "] " + rawMessage + Environment.NewLine);
             return;
         }
 
         if (parsedMessage is not JObject message)
         {
-            PublishError("[app-server] " + rawMessage + Environment.NewLine);
+            PublishError("[" + GetLocalization().OutputTagAppServer + "] " + rawMessage + Environment.NewLine);
             return;
         }
 
@@ -934,7 +940,7 @@ public sealed class CodexProcessService : IDisposable
         {
             var errorMessage = GetNestedString(message["error"], "message")
                 ?? message["error"]?.Value<string>()
-                ?? "App server request failed.";
+                ?? GetLocalization().AppServerRequestFailed;
             tcs.TrySetException(new InvalidOperationException(errorMessage));
             return;
         }
@@ -1115,7 +1121,7 @@ public sealed class CodexProcessService : IDisposable
         var phase = payload?["phase"]?.Value<string>();
         if (string.Equals(phase, "commentary", StringComparison.OrdinalIgnoreCase))
         {
-            turnState.OnEventMessage?.Invoke(new ChatMessage(false, message.Trim(), isEvent: true, title: "Commentary"));
+            turnState.OnEventMessage?.Invoke(new ChatMessage(false, message.Trim(), isEvent: true, title: GetLocalization().EventCommentaryTitle));
             return;
         }
 
@@ -1177,7 +1183,7 @@ public sealed class CodexProcessService : IDisposable
         var message = parameters?["message"]?.Value<string>();
         if (!string.IsNullOrWhiteSpace(message))
         {
-            turnState?.OnEventMessage?.Invoke(new ChatMessage(false, message.Trim(), isEvent: true, title: "MCP progress"));
+            turnState?.OnEventMessage?.Invoke(new ChatMessage(false, message.Trim(), isEvent: true, title: GetLocalization().EventMcpProgressTitle));
         }
     }
 
@@ -1397,7 +1403,7 @@ public sealed class CodexProcessService : IDisposable
 
         if (writer is null)
         {
-            throw new InvalidOperationException("Codex app server is not available.");
+            throw new InvalidOperationException(GetLocalization().AppServerUnavailable);
         }
 
         var json = message.ToString(Formatting.None);
@@ -2869,7 +2875,7 @@ public sealed class CodexProcessService : IDisposable
         var info = JsonConvert.SerializeObject(request, Formatting.None);
         if (!string.IsNullOrWhiteSpace(info))
         {
-            PublishError("[approval] " + info + Environment.NewLine);
+            PublishError("[" + GetLocalization().OutputTagApproval + "] " + info + Environment.NewLine);
         }
 
         if (ApprovalRequestHandler is null)
@@ -2884,7 +2890,7 @@ public sealed class CodexProcessService : IDisposable
         }
         catch (Exception ex)
         {
-            PublishError("[approval] " + ex.Message + Environment.NewLine);
+            PublishError("[" + GetLocalization().OutputTagApproval + "] " + ex.Message + Environment.NewLine);
             return GetDefaultDeclineDecision(request.Method);
         }
     }
@@ -2902,9 +2908,14 @@ public sealed class CodexProcessService : IDisposable
         }
         catch (Exception ex)
         {
-            PublishError("[user-input] " + ex.Message + Environment.NewLine);
+            PublishError("[" + GetLocalization().OutputTagUserInput + "] " + ex.Message + Environment.NewLine);
             return new JObject { ["answers"] = new JObject() };
         }
+    }
+
+    private LocalizationService GetLocalization()
+    {
+        return new LocalizationService(_languageOverride);
     }
 
     private static IReadOnlyList<CodexApprovalOption> BuildCommandApprovalOptions(JArray? availableDecisions, JArray? proposedExecpolicyAmendment)
@@ -3008,9 +3019,12 @@ public sealed class CodexProcessService : IDisposable
 
     private static string BuildServerConfigKey(CodexExtensionSettings settings)
     {
+        var resolvedExecutablePath = CodexExecutableResolver.ResolveExecutableLocation(settings.CodexExecutablePath, settings.EnvironmentVariables);
         return string.Join("\n", new[]
         {
-            ResolveExecutablePath(settings.CodexExecutablePath),
+            string.IsNullOrWhiteSpace(resolvedExecutablePath)
+                ? CodexExecutableResolver.NormalizeConfiguredExecutablePath(settings.CodexExecutablePath)
+                : resolvedExecutablePath,
             string.Join("\n", BuildManagedMcpOverrideLines(settings)),
             settings.RawTomlOverrides ?? string.Empty,
             settings.AdditionalArguments ?? string.Empty,
@@ -3149,6 +3163,16 @@ public sealed class CodexProcessService : IDisposable
     private static ProcessStartInfo BuildStartInfo(string executablePath, string arguments, string workingDirectory)
     {
         var resolvedWorkingDirectory = ResolveWorkingDirectory(workingDirectory);
+        if (IsPowerShellScript(executablePath))
+        {
+            return new ProcessStartInfo
+            {
+                FileName = ResolvePowerShellHost(),
+                WorkingDirectory = resolvedWorkingDirectory,
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -File " + QuoteArgument(executablePath) + (string.IsNullOrWhiteSpace(arguments) ? string.Empty : " " + arguments)
+            };
+        }
+
         if (!RequiresCommandShell(executablePath))
         {
             return new ProcessStartInfo
@@ -3231,23 +3255,6 @@ public sealed class CodexProcessService : IDisposable
         return @"\\?\" + path;
     }
 
-    private static string ResolveExecutablePath(string executablePath)
-    {
-        if (string.IsNullOrWhiteSpace(executablePath))
-        {
-            executablePath = "codex.cmd";
-        }
-
-        if (!IsWindows())
-        {
-            return executablePath;
-        }
-
-        return string.Equals(executablePath, "codex", StringComparison.OrdinalIgnoreCase)
-            ? "codex.cmd"
-            : executablePath;
-    }
-
     private static void ApplyEnvironmentVariables(ProcessStartInfo psi, string environmentVariables)
     {
         foreach (var line in environmentVariables.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
@@ -3300,9 +3307,24 @@ public sealed class CodexProcessService : IDisposable
             || extension.Equals(".bat", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsPowerShellScript(string executablePath)
+    {
+        return IsWindows()
+            && Path.GetExtension(executablePath).Equals(".ps1", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string QuoteForCommandShell(string value)
     {
         return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
+    private static string ResolvePowerShellHost()
+    {
+        var systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        var windowsPowerShell = Path.Combine(systemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+        return File.Exists(windowsPowerShell)
+            ? windowsPowerShell
+            : "powershell.exe";
     }
 
     private static bool IsWindows()

@@ -108,8 +108,7 @@ public sealed class SolutionContextService
 
     public string GetCodexHomeDirectory()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(home, ".codex");
+        return CodexEnvironmentPathHelper.GetCodexHomeDirectory();
     }
 
     public string GetCodexSkillsDirectory()

@@ -498,7 +498,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _ => string.Empty
     };
 
-    public string CodexSetupInstallCommand => CodexEnvironmentService.DefaultInstallCommand;
+    public string CodexSetupInstallCommand => CodexEnvironmentService.FallbackInstallCommand;
 
     public string CodexSetupExecutablePath => string.IsNullOrWhiteSpace(CodexEnvironmentStatus.ResolvedExecutablePath)
         ? CodexEnvironmentStatus.ConfiguredExecutablePath
@@ -1055,7 +1055,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
         if (!IsCodexReady)
         {
-            AppendOutput("[setup] " + CodexSetupSummary + Environment.NewLine);
+            AppendOutput("[" + _localization.OutputTagSetup + "] " + CodexSetupSummary + Environment.NewLine);
             return;
         }
 
@@ -1144,7 +1144,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             await RefreshThreadsAsync(Settings.CurrentThreadId).ConfigureAwait(false);
             await EnsureCurrentThreadHasFriendlyNameAsync(shouldAutoNameThread ? promptToSend : null).ConfigureAwait(false);
             await RefreshServerSurfacesAsync().ConfigureAwait(false);
-            AppendOutput($"{Environment.NewLine}[exit code: {exitCode}]{Environment.NewLine}");
+            AppendOutput($"{Environment.NewLine}[{_localization.ExitCodeLabel}: {exitCode}]{Environment.NewLine}");
         }
         catch (OperationCanceledException)
         {
@@ -1761,7 +1761,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             }
             catch (Exception ex)
             {
-                AppendOutput("[auth] " + ex.Message + Environment.NewLine);
+                AppendOutput("[" + _localization.OutputTagAuth + "] " + ex.Message + Environment.NewLine);
             }
         });
     }
@@ -1777,7 +1777,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             }
             catch (Exception ex)
             {
-                AppendOutput("[auth] " + ex.Message + Environment.NewLine);
+                AppendOutput("[" + _localization.OutputTagAuth + "] " + ex.Message + Environment.NewLine);
             }
         });
     }
@@ -1800,7 +1800,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ManagedMcpServers.Add(new CodexManagedMcpServer
         {
             Enabled = true,
-            Name = transport == "url" ? "novo-mcp-url" : "novo-mcp",
+            Name = transport == "url" ? _localization.ManagedMcpDefaultUrlName : _localization.ManagedMcpDefaultName,
             TransportType = transport
         });
     }
@@ -1837,7 +1837,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
         catch (Exception ex)
         {
-            AppendOutput("[skills] " + ex.Message + Environment.NewLine);
+            AppendOutput("[" + _localization.OutputTagSkills + "] " + ex.Message + Environment.NewLine);
         }
     }
 
@@ -2071,7 +2071,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         catch (Exception ex)
         {
             RunOnUiThread(() => skill.IsEnabled = !requestedValue);
-            AppendOutput("[skills] " + ex.Message + Environment.NewLine);
+            AppendOutput("[" + _localization.OutputTagSkills + "] " + ex.Message + Environment.NewLine);
         }
     }
 
@@ -2100,7 +2100,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
         catch (Exception ex)
         {
-            AppendOutput("[skills-remote] " + ex.Message + Environment.NewLine);
+            AppendOutput("[" + _localization.OutputTagRemoteSkills + "] " + ex.Message + Environment.NewLine);
         }
     }
 
@@ -2113,7 +2113,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         catch (Exception ex)
         {
             ActivityLog.TryLogError("CodexVsix", _localization.AsyncPanelInitializeLogMessage + Environment.NewLine + ex);
-            AppendOutput("[init] " + ex.Message + Environment.NewLine);
+            AppendOutput("[" + _localization.OutputTagInit + "] " + ex.Message + Environment.NewLine);
             CodexEnvironmentStatus = new CodexEnvironmentStatus
             {
                 Stage = CodexSetupStage.Error,
@@ -2154,7 +2154,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             {
                 Stage = CodexSetupStage.Error,
                 ConfiguredExecutablePath = Settings.CodexExecutablePath ?? string.Empty,
-                AuthFilePath = _codexEnvironmentService.GetAuthFilePath(),
+                AuthFilePath = _codexEnvironmentService.GetAuthFilePath(Settings.EnvironmentVariables),
                 ErrorDetail = ex.Message
             });
         }
@@ -2293,7 +2293,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
         catch (Exception ex)
         {
-            AppendOutput("[server] " + ex.Message + Environment.NewLine);
+            AppendOutput("[" + _localization.OutputTagServer + "] " + ex.Message + Environment.NewLine);
         }
     }
 
@@ -2890,7 +2890,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void AppendStderr(string text)
     {
-        AppendOutput("[stderr] " + text);
+        AppendOutput("[" + _localization.OutputTagStderr + "] " + text);
     }
 
     private void UpdateTokenUsage(long totalTokens, long? contextWindow)

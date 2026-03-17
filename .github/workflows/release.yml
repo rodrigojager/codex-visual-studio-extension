@@ -132,6 +132,15 @@ jobs:
           name: CodexVsix-${{ steps.version.outputs.version }}
           path: ${{ steps.package.outputs.path }}
 
+      - name: Publish Visual Studio Marketplace
+        if: ${{ secrets.VS_MARKETPLACE_PUBLISHER != '' && secrets.VS_MARKETPLACE_PAT != '' }}
+        shell: pwsh
+        run: |
+          .\scripts\Publish-Marketplace.ps1 `
+            -PublisherName "${{ secrets.VS_MARKETPLACE_PUBLISHER }}" `
+            -PersonalAccessToken "${{ secrets.VS_MARKETPLACE_PAT }}" `
+            -VsixPath "${{ steps.package.outputs.path }}"
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
