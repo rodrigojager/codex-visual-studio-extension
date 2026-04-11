@@ -7,6 +7,8 @@ namespace CodexVsix.UI;
 
 public sealed class ChatMarkdownViewer : RichTextBox
 {
+    private bool _isRenderingDocument;
+
     public static readonly DependencyProperty MarkdownTextProperty = DependencyProperty.Register(
         nameof(MarkdownText),
         typeof(string),
@@ -27,7 +29,7 @@ public sealed class ChatMarkdownViewer : RichTextBox
         VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         ContextMenuService.SetIsEnabled(this, true);
-        Document = MarkdownRenderer.CreateDocument(string.Empty);
+        RenderDocument();
     }
 
     public string MarkdownText
@@ -43,6 +45,35 @@ public sealed class ChatMarkdownViewer : RichTextBox
             return;
         }
 
-        viewer.Document = MarkdownRenderer.CreateDocument(e.NewValue as string ?? string.Empty);
+        viewer.RenderDocument();
+    }
+
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        if (_isRenderingDocument)
+        {
+            return;
+        }
+
+        if (e.Property == ForegroundProperty)
+        {
+            // Rebuild the FlowDocument so markdown brushes follow VS theme/foreground updates.
+            RenderDocument();
+        }
+    }
+
+    private void RenderDocument()
+    {
+        _isRenderingDocument = true;
+        try
+        {
+            Document = MarkdownRenderer.CreateDocument(MarkdownText ?? string.Empty, Foreground);
+        }
+        finally
+        {
+            _isRenderingDocument = false;
+        }
     }
 }

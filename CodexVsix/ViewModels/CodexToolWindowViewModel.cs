@@ -75,6 +75,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private string _selectedSettingsSection = string.Empty;
     private CodexRateLimitSummary _rateLimitSummary = new();
     private CodexEnvironmentStatus _codexEnvironmentStatus = new() { Stage = CodexSetupStage.Checking };
+    private bool _hasCompletedEnvironmentCheck;
+    private bool _hasLoadedStartupSurfaces;
+    private bool _isToolWindowStartupRefreshInProgress;
     private long _conversationStateVersion;
 
     public CodexToolWindowViewModel()
@@ -454,7 +457,25 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public bool IsCodexReady => CodexEnvironmentStatus.IsReady;
 
-    public bool ShowCodexSetupCard => CodexEnvironmentStatus.Stage != CodexSetupStage.Unknown
+    public bool HasCompletedEnvironmentCheck
+    {
+        get => _hasCompletedEnvironmentCheck;
+        private set
+        {
+            if (_hasCompletedEnvironmentCheck == value)
+            {
+                return;
+            }
+
+            _hasCompletedEnvironmentCheck = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ShowCodexSetupCard));
+        }
+    }
+
+    public bool ShowCodexSetupCard => HasCompletedEnvironmentCheck
+        && CodexEnvironmentStatus.Stage != CodexSetupStage.Unknown
+        && CodexEnvironmentStatus.Stage != CodexSetupStage.Checking
         && CodexEnvironmentStatus.Stage != CodexSetupStage.Ready;
 
     public bool ShowCodexSetupDetail => !string.IsNullOrWhiteSpace(CodexSetupDetail);
@@ -2139,6 +2160,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         await RefreshModelOptionsAsync().ConfigureAwait(false);
         await RefreshThreadsAsync(null).ConfigureAwait(false);
         await RefreshServerSurfacesAsync(forceSkillReload: true).ConfigureAwait(false);
+        _hasLoadedStartupSurfaces = true;
     }
 
     private async Task RefreshCodexStatusAsync()
@@ -2146,16 +2168,24 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         try
         {
             var status = await _codexEnvironmentService.InspectAsync(Settings, CancellationToken.None).ConfigureAwait(false);
-            RunOnUiThread(() => CodexEnvironmentStatus = status);
+            RunOnUiThread(() =>
+            {
+                CodexEnvironmentStatus = status;
+                HasCompletedEnvironmentCheck = true;
+            });
         }
         catch (Exception ex)
         {
-            RunOnUiThread(() => CodexEnvironmentStatus = new CodexEnvironmentStatus
+            RunOnUiThread(() =>
             {
-                Stage = CodexSetupStage.Error,
-                ConfiguredExecutablePath = Settings.CodexExecutablePath ?? string.Empty,
-                AuthFilePath = _codexEnvironmentService.GetAuthFilePath(Settings.EnvironmentVariables),
-                ErrorDetail = ex.Message
+                CodexEnvironmentStatus = new CodexEnvironmentStatus
+                {
+                    Stage = CodexSetupStage.Error,
+                    ConfiguredExecutablePath = Settings.CodexExecutablePath ?? string.Empty,
+                    AuthFilePath = _codexEnvironmentService.GetAuthFilePath(Settings.EnvironmentVariables),
+                    ErrorDetail = ex.Message
+                };
+                HasCompletedEnvironmentCheck = true;
             });
         }
     }
@@ -2171,10 +2201,58 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             DetectedPromptSkills.Clear();
             RateLimitSummary = new CodexRateLimitSummary();
             PromptDisplayText = string.Empty;
+            _hasLoadedStartupSurfaces = false;
             OnPropertyChanged(nameof(HasDetectedPromptSkills));
             OnPropertyChanged(nameof(HasRemoteSkills));
             OnPropertyChanged(nameof(VisibleSkills));
             OnPropertyChanged(nameof(VisibleRemoteSkills));
+        });
+    }
+
+    public void EnsureToolWindowStartupState()
+    {
+        if (_isToolWindowStartupRefreshInProgress)
+        {
+            return;
+        }
+
+        // Rehydrate status/surfaces when the tool window is shown again, but avoid
+        // repeating expensive startup calls once the current session is already loaded.
+        if (HasCompletedEnvironmentCheck && (IsCodexReady ? _hasLoadedStartupSurfaces : true))
+        {
+            return;
+        }
+
+        _isToolWindowStartupRefreshInProgress = true;
+        ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+        {
+            try
+            {
+                await RefreshCodexStatusAsync().ConfigureAwait(false);
+                if (!IsCodexReady)
+                {
+                    ClearServerSurfaces();
+                    return;
+                }
+
+                if (_hasLoadedStartupSurfaces)
+                {
+                    return;
+                }
+
+                await RefreshModelOptionsAsync().ConfigureAwait(false);
+                await RefreshThreadsAsync(null).ConfigureAwait(false);
+                await RefreshServerSurfacesAsync(forceSkillReload: false).ConfigureAwait(false);
+                _hasLoadedStartupSurfaces = true;
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("[" + _localization.OutputTagInit + "] " + ex.Message + Environment.NewLine);
+            }
+            finally
+            {
+                RunOnUiThread(() => _isToolWindowStartupRefreshInProgress = false);
+            }
         });
     }
 

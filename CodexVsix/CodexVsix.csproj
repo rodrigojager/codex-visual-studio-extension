@@ -32,6 +32,10 @@
     <StartWorkingDirectory>$(DevEnvDir)</StartWorkingDirectory>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <BuildVsixPackage>true</BuildVsixPackage>
+  </PropertyGroup>
+
   <Target Name="BuildVsixArtifacts"
           AfterTargets="Build"
           Condition="'$(MSBuildRuntimeType)' != 'Core' and ('$(Configuration)' == 'Debug' or '$(BuildVsixPackage)' == 'true')">

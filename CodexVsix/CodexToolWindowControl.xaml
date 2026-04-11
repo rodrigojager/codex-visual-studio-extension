@@ -60,6 +60,7 @@
         <SolidColorBrush x:Key="EventDetailBrush" Color="#10FFFFFF" />
         <SolidColorBrush x:Key="UserBubbleBrush" Color="#1EFFFFFF" />
         <SolidColorBrush x:Key="SendButtonBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.CommandBarHoverColorKey}}" />
+        <SolidColorBrush x:Key="ControlHoverBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.CommandBarHoverColorKey}}" />
         <SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowTextColorKey}}" />
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.PanelTextColorKey}}" />
         <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.SystemGrayTextColorKey}}" />
@@ -115,10 +116,10 @@
         </Style>
 
         <Style x:Key="ChipButtonStyle" TargetType="Button" BasedOn="{StaticResource MiniButtonStyle}">
-            <Setter Property="Background" Value="{StaticResource ChipBrush}" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="Background" Value="{StaticResource PopupBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="MinHeight" Value="32" />
             <Setter Property="FontSize" Value="12" />
@@ -136,6 +137,21 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource ControlHoverBrush}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
+                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{StaticResource ControlHoverBrush}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
+                    <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.62" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="ChipToggleButtonStyle" TargetType="ToggleButton">
@@ -473,9 +489,9 @@
 
         <Style x:Key="PanelComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource InlineComboStyle}">
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
-            <Setter Property="Background" Value="{StaticResource InputBrush}" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="{StaticResource PopupBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="10,6" />
         </Style>
 

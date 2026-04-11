@@ -1450,7 +1450,7 @@ public sealed class LocalizationService
     public string TasksTitle => GetLocalizedString("TasksTitle", "Historico");
     public string RecentTasksTitle => GetLocalizedString("RecentTasksTitle", "Historico recente");
     public string NoTasksDetected => GetLocalizedString("NoTasksDetected", "Nenhum historico ainda.");
-    public string PersonalAccountLabel => GetLocalizedString("PersonalAccountLabel", "Conta pessoal");
+    public string PersonalAccountLabel => AccountTitle;
     public string OpenAgentSettingsLabel => GetLocalizedString("OpenAgentSettingsLabel", "Abrir configurações do agente");
     public string ReadDocsLabel => GetLocalizedString("ReadDocsLabel", "Ler documentação");
     public string OpenConfigTomlLabel => GetLocalizedString("OpenConfigTomlLabel", "Abrir config.toml");
