@@ -1,3 +1,6 @@
+using CodexVsix.Services;
+using Microsoft.VisualStudio.PlatformUI;
+using Microsoft.VisualStudio.Shell;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -10,7 +13,6 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using CodexVsix.Services;
 
 namespace CodexVsix.UI;
 
@@ -18,6 +20,9 @@ internal static class MarkdownRenderer
 {
     private const string CopyIconPathData = "M384 336l0-208c0-35.3-28.7-64-64-64l-224 0c-35.3 0-64 28.7-64 64l0 208c0 35.3 28.7 64 64 64l224 0c35.3 0 64-28.7 64-64zM96 80l224 0c26.5 0 48 21.5 48 48l0 208c0 26.5-21.5 48-48 48l-224 0c-26.5 0-48-21.5-48-48l0-208c0-26.5 21.5-48 48-48zM448 96l0 208c0 44.2-35.8 80-80 80l-32 0 0-16 32 0c35.3 0 64-28.7 64-64l0-208c0-35.3-28.7-64-64-64l-224 0 0-16 224 0c44.2 0 80 35.8 80 80z";
     private static LocalizationService Localization => new();
+    // Rendering helpers are static; keep theme context thread-local for the active CreateDocument call.
+    [ThreadStatic]
+    private static MarkdownRenderTheme? _currentTheme;
     private static readonly Regex HeadingRegex = new(@"^(#{1,6})\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex BulletRegex = new(@"^\s*[-*+]\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex OrderedRegex = new(@"^\s*\d+\.\s+(.*)$", RegexOptions.Compiled);
@@ -34,28 +39,40 @@ internal static class MarkdownRenderer
         "(?<property>\"(?:\\\\.|[^\"])+\"\\s*:)|(?<string>:\\s*\"(?:\\\\.|[^\"])*\")|(?<number>:\\s*-?\\d+(?:\\.\\d+)?)|(?<keyword>:\\s*(?:true|false|null)\\b)",
         RegexOptions.Compiled | RegexOptions.Multiline);
 
-    public static FlowDocument CreateDocument(string markdown)
+    private static MarkdownRenderTheme CurrentTheme => _currentTheme ??= MarkdownRenderTheme.Create(null);
+
+    public static FlowDocument CreateDocument(string markdown, Brush? foreground = null)
     {
-        var document = new FlowDocument
-        {
-            PagePadding = new Thickness(0),
-            Background = Brushes.Transparent,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 14,
-            Foreground = Brushes.White
-        };
+        var previousTheme = _currentTheme;
+        _currentTheme = MarkdownRenderTheme.Create(foreground);
 
-        foreach (var block in ParseBlocks(markdown ?? string.Empty))
+        try
         {
-            document.Blocks.Add(block);
+            var document = new FlowDocument
+            {
+                PagePadding = new Thickness(0),
+                Background = Brushes.Transparent,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 14,
+                Foreground = CreateBrush(CurrentTheme.PrimaryTextColor)
+            };
+
+            foreach (var block in ParseBlocks(markdown ?? string.Empty))
+            {
+                document.Blocks.Add(block);
+            }
+
+            if (document.Blocks.Count == 0)
+            {
+                document.Blocks.Add(CreateParagraph(string.Empty));
+            }
+
+            return document;
         }
-
-        if (document.Blocks.Count == 0)
+        finally
         {
-            document.Blocks.Add(CreateParagraph(string.Empty));
+            _currentTheme = previousTheme;
         }
-
-        return document;
     }
 
     private static IEnumerable<Block> ParseBlocks(string markdown)
@@ -266,7 +283,9 @@ internal static class MarkdownRenderer
     {
         var border = new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255)),
+            Background = CreateBrush(CurrentTheme.InlineCodeBackgroundColor),
+            BorderBrush = CreateBrush(CurrentTheme.InlineCodeBorderColor),
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(4, 1, 4, 1),
             Margin = new Thickness(1, 0, 1, 0),
@@ -274,7 +293,7 @@ internal static class MarkdownRenderer
             {
                 Text = code,
                 FontFamily = new FontFamily("Consolas"),
-                Foreground = Brushes.White
+                Foreground = CreateBrush(CurrentTheme.PrimaryTextColor)
             }
         };
 
@@ -288,7 +307,7 @@ internal static class MarkdownRenderer
     {
         var hyperlink = new Hyperlink(new Run(label))
         {
-            Foreground = new SolidColorBrush(Color.FromRgb(125, 193, 255)),
+            Foreground = CreateBrush(CurrentTheme.LinkColor),
             Cursor = System.Windows.Input.Cursors.Hand
         };
 
@@ -338,8 +357,8 @@ internal static class MarkdownRenderer
             Margin = new Thickness(0, 8, 0, 12),
             Padding = new Thickness(12),
             CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(Color.FromArgb(22, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+            Background = CreateBrush(CurrentTheme.BlockBackgroundColor),
+            BorderBrush = CreateBrush(CurrentTheme.BlockBorderColor),
             BorderThickness = new Thickness(1),
             Child = child
         };
@@ -380,7 +399,7 @@ internal static class MarkdownRenderer
         var stateLabel = new TextBlock
         {
             Text = Localization.MermaidDiagramLabel,
-            Foreground = Brushes.White,
+            Foreground = CreateBrush(CurrentTheme.PrimaryTextColor),
             Margin = new Thickness(0, 0, 8, 0),
             VerticalAlignment = VerticalAlignment.Center,
             FontSize = 11,
@@ -406,8 +425,8 @@ internal static class MarkdownRenderer
         trackFactory.SetValue(FrameworkElement.WidthProperty, 40d);
         trackFactory.SetValue(FrameworkElement.HeightProperty, 22d);
         trackFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(11));
-        trackFactory.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(74, 155, 230)));
-        trackFactory.SetValue(Border.BorderBrushProperty, new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)));
+        trackFactory.SetValue(Border.BackgroundProperty, CreateBrush(CurrentTheme.ToggleTrackOnColor));
+        trackFactory.SetValue(Border.BorderBrushProperty, CreateBrush(CurrentTheme.ToggleTrackOnBorderColor));
         trackFactory.SetValue(Border.BorderThicknessProperty, new Thickness(1));
 
         var thumbFactory = new FrameworkElementFactory(typeof(Border));
@@ -418,8 +437,8 @@ internal static class MarkdownRenderer
         thumbFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Right);
         thumbFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
         thumbFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(999));
-        thumbFactory.SetValue(Border.BackgroundProperty, Brushes.White);
-        thumbFactory.SetValue(Border.BorderBrushProperty, new SolidColorBrush(Color.FromArgb(24, 0, 0, 0)));
+        thumbFactory.SetValue(Border.BackgroundProperty, CreateBrush(CurrentTheme.ToggleThumbColor));
+        thumbFactory.SetValue(Border.BorderBrushProperty, CreateBrush(CurrentTheme.ToggleThumbBorderColor));
         thumbFactory.SetValue(Border.BorderThicknessProperty, new Thickness(1));
 
         rootFactory.AppendChild(trackFactory);
@@ -435,8 +454,8 @@ internal static class MarkdownRenderer
             Property = ToggleButton.IsCheckedProperty,
             Value = false
         };
-        uncheckedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(32, 255, 255, 255)), "Track"));
-        uncheckedTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)), "Track"));
+        uncheckedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, CreateBrush(CurrentTheme.ToggleTrackOffColor), "Track"));
+        uncheckedTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, CreateBrush(CurrentTheme.ToggleTrackOffBorderColor), "Track"));
         uncheckedTrigger.Setters.Add(new Setter(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left, "Thumb"));
         uncheckedTrigger.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(3, 0, 0, 0), "Thumb"));
 
@@ -445,7 +464,7 @@ internal static class MarkdownRenderer
             Property = UIElement.IsMouseOverProperty,
             Value = true
         };
-        hoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)), "Track"));
+        hoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, CreateBrush(CurrentTheme.IconHoverBorderColor), "Track"));
 
         template.Triggers.Add(uncheckedTrigger);
         template.Triggers.Add(hoverTrigger);
@@ -482,8 +501,8 @@ internal static class MarkdownRenderer
     {
         return new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)),
+            Background = CreateBrush(CurrentTheme.BadgeBackgroundColor),
+            BorderBrush = CreateBrush(CurrentTheme.BadgeBorderColor),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(8, 3, 8, 3),
@@ -494,7 +513,7 @@ internal static class MarkdownRenderer
                 VerticalAlignment = VerticalAlignment.Center,
                 FontSize = 11,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromArgb(210, 255, 255, 255))
+                Foreground = CreateBrush(CurrentTheme.PrimaryTextColor)
             }
         };
     }
@@ -518,7 +537,7 @@ internal static class MarkdownRenderer
                 Child = new Path
                 {
                     Data = Geometry.Parse(pathData),
-                    Fill = Brushes.White,
+                    Fill = CreateBrush(CurrentTheme.PrimaryTextColor),
                     Stretch = Stretch.Uniform
                 }
             }
@@ -546,8 +565,8 @@ internal static class MarkdownRenderer
             Property = UIElement.IsMouseOverProperty,
             Value = true
         };
-        hoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(28, 255, 255, 255)), "Chrome"));
-        hoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)), "Chrome"));
+        hoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, CreateBrush(CurrentTheme.IconHoverBackgroundColor), "Chrome"));
+        hoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, CreateBrush(CurrentTheme.IconHoverBorderColor), "Chrome"));
         hoverTrigger.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(1), "Chrome"));
 
         var pressedTrigger = new Trigger
@@ -555,8 +574,8 @@ internal static class MarkdownRenderer
             Property = ButtonBase.IsPressedProperty,
             Value = true
         };
-        pressedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(44, 255, 255, 255)), "Chrome"));
-        pressedTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, new SolidColorBrush(Color.FromArgb(56, 255, 255, 255)), "Chrome"));
+        pressedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, CreateBrush(CurrentTheme.IconPressedBackgroundColor), "Chrome"));
+        pressedTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, CreateBrush(CurrentTheme.IconPressedBorderColor), "Chrome"));
         pressedTrigger.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(1), "Chrome"));
 
         template.Triggers.Add(hoverTrigger);
@@ -578,7 +597,7 @@ internal static class MarkdownRenderer
             BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Padding = new Thickness(0),
-            Foreground = Brushes.White,
+            Foreground = CreateBrush(CurrentTheme.PrimaryTextColor),
             FontFamily = new FontFamily("Consolas"),
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
@@ -594,7 +613,7 @@ internal static class MarkdownRenderer
             Background = Brushes.Transparent,
             FontFamily = new FontFamily("Consolas"),
             FontSize = 13,
-            Foreground = Brushes.White
+            Foreground = CreateBrush(CurrentTheme.PrimaryTextColor)
         };
 
         var normalizedLanguage = (language ?? string.Empty).Trim().ToLowerInvariant();
@@ -671,37 +690,37 @@ internal static class MarkdownRenderer
         var text = match.Value;
         if (match.Groups["comment"].Success)
         {
-            return CreateRun(text, Color.FromRgb(106, 153, 85));
+            return CreateRun(text, CurrentTheme.CodeCommentColor);
         }
 
         if (match.Groups["string"].Success)
         {
-            return CreateRun(text, Color.FromRgb(206, 145, 120));
+            return CreateRun(text, CurrentTheme.CodeStringColor);
         }
 
         if (match.Groups["number"].Success)
         {
-            return CreateRun(text, Color.FromRgb(181, 206, 168));
+            return CreateRun(text, CurrentTheme.CodeNumberColor);
         }
 
         if (match.Groups["property"].Success)
         {
-            return CreateRun(text, Color.FromRgb(156, 220, 254));
+            return CreateRun(text, CurrentTheme.CodePropertyColor);
         }
 
         if (match.Groups["keyword"].Success)
         {
-            return CreateRun(text, Color.FromRgb(86, 156, 214), FontWeights.SemiBold);
+            return CreateRun(text, CurrentTheme.CodeKeywordColor, FontWeights.SemiBold);
         }
 
-        return CreateRun(text, Colors.White);
+        return CreateRun(text, CurrentTheme.PrimaryTextColor);
     }
 
     private static Run CreateRun(string text, Color color, FontWeight? weight = null)
     {
         var run = new Run(text)
         {
-            Foreground = new SolidColorBrush(color)
+            Foreground = CreateBrush(color)
         };
 
         if (weight is not null)
@@ -721,7 +740,7 @@ internal static class MarkdownRenderer
             var fallbackText = new TextBlock
             {
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = new SolidColorBrush(Color.FromArgb(210, 255, 255, 255))
+                Foreground = CreateBrush(CurrentTheme.PrimaryTextColor)
             };
             fallbackText.Text = Localization.MermaidPreviewFallback;
             return fallbackText;
@@ -730,7 +749,7 @@ internal static class MarkdownRenderer
             {
                 Text = Localization.MermaidPreviewFallback,
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = new SolidColorBrush(Color.FromArgb(210, 255, 255, 255))
+                Foreground = CreateBrush(CurrentTheme.PrimaryTextColor)
             };
         }
 
@@ -2125,6 +2144,45 @@ internal static class MarkdownRenderer
         return brush;
     }
 
+    private static SolidColorBrush CreateBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static Color Blend(Color baseColor, Color mixColor, double amount)
+    {
+        amount = Math.Max(0d, Math.Min(1d, amount));
+        return Color.FromRgb(
+            (byte)Math.Round(baseColor.R + ((mixColor.R - baseColor.R) * amount)),
+            (byte)Math.Round(baseColor.G + ((mixColor.G - baseColor.G) * amount)),
+            (byte)Math.Round(baseColor.B + ((mixColor.B - baseColor.B) * amount)));
+    }
+
+    private static double GetPerceivedBrightness(Color color)
+    {
+        return ((color.R * 0.299d) + (color.G * 0.587d) + (color.B * 0.114d)) / 255d;
+    }
+
+    private static Color ToColor(Brush? brush, Color fallback)
+    {
+        return brush is SolidColorBrush solidBrush ? solidBrush.Color : fallback;
+    }
+
+    private static Color GetThemedColor(ThemeResourceKey key, Color fallback)
+    {
+        try
+        {
+            var themedColor = VSColorTheme.GetThemedColor(key);
+            return Color.FromArgb(themedColor.A, themedColor.R, themedColor.G, themedColor.B);
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
     private static string NormalizeMermaidEdgeLine(string rawLine)
     {
         var line = (rawLine ?? string.Empty).Trim();
@@ -2381,6 +2439,165 @@ internal static class MarkdownRenderer
         public double StrokeThickness { get; }
 
         public DoubleCollection? StrokeDashArray { get; }
+    }
+
+    private sealed class MarkdownRenderTheme
+    {
+        private MarkdownRenderTheme(
+            Color windowBackgroundColor,
+            Color primaryTextColor,
+            Color linkColor,
+            Color inlineCodeBackgroundColor,
+            Color inlineCodeBorderColor,
+            Color blockBackgroundColor,
+            Color blockBorderColor,
+            Color badgeBackgroundColor,
+            Color badgeBorderColor,
+            Color iconHoverBackgroundColor,
+            Color iconHoverBorderColor,
+            Color iconPressedBackgroundColor,
+            Color iconPressedBorderColor,
+            Color toggleTrackOnColor,
+            Color toggleTrackOnBorderColor,
+            Color toggleTrackOffColor,
+            Color toggleTrackOffBorderColor,
+            Color toggleThumbColor,
+            Color toggleThumbBorderColor,
+            Color codeCommentColor,
+            Color codeStringColor,
+            Color codeNumberColor,
+            Color codePropertyColor,
+            Color codeKeywordColor)
+        {
+            WindowBackgroundColor = windowBackgroundColor;
+            PrimaryTextColor = primaryTextColor;
+            LinkColor = linkColor;
+            InlineCodeBackgroundColor = inlineCodeBackgroundColor;
+            InlineCodeBorderColor = inlineCodeBorderColor;
+            BlockBackgroundColor = blockBackgroundColor;
+            BlockBorderColor = blockBorderColor;
+            BadgeBackgroundColor = badgeBackgroundColor;
+            BadgeBorderColor = badgeBorderColor;
+            IconHoverBackgroundColor = iconHoverBackgroundColor;
+            IconHoverBorderColor = iconHoverBorderColor;
+            IconPressedBackgroundColor = iconPressedBackgroundColor;
+            IconPressedBorderColor = iconPressedBorderColor;
+            ToggleTrackOnColor = toggleTrackOnColor;
+            ToggleTrackOnBorderColor = toggleTrackOnBorderColor;
+            ToggleTrackOffColor = toggleTrackOffColor;
+            ToggleTrackOffBorderColor = toggleTrackOffBorderColor;
+            ToggleThumbColor = toggleThumbColor;
+            ToggleThumbBorderColor = toggleThumbBorderColor;
+            CodeCommentColor = codeCommentColor;
+            CodeStringColor = codeStringColor;
+            CodeNumberColor = codeNumberColor;
+            CodePropertyColor = codePropertyColor;
+            CodeKeywordColor = codeKeywordColor;
+        }
+
+        public Color WindowBackgroundColor { get; }
+
+        public Color PrimaryTextColor { get; }
+
+        public Color LinkColor { get; }
+
+        public Color InlineCodeBackgroundColor { get; }
+
+        public Color InlineCodeBorderColor { get; }
+
+        public Color BlockBackgroundColor { get; }
+
+        public Color BlockBorderColor { get; }
+
+        public Color BadgeBackgroundColor { get; }
+
+        public Color BadgeBorderColor { get; }
+
+        public Color IconHoverBackgroundColor { get; }
+
+        public Color IconHoverBorderColor { get; }
+
+        public Color IconPressedBackgroundColor { get; }
+
+        public Color IconPressedBorderColor { get; }
+
+        public Color ToggleTrackOnColor { get; }
+
+        public Color ToggleTrackOnBorderColor { get; }
+
+        public Color ToggleTrackOffColor { get; }
+
+        public Color ToggleTrackOffBorderColor { get; }
+
+        public Color ToggleThumbColor { get; }
+
+        public Color ToggleThumbBorderColor { get; }
+
+        public Color CodeCommentColor { get; }
+
+        public Color CodeStringColor { get; }
+
+        public Color CodeNumberColor { get; }
+
+        public Color CodePropertyColor { get; }
+
+        public Color CodeKeywordColor { get; }
+
+        public static MarkdownRenderTheme Create(Brush? foreground)
+        {
+            var windowBackground = GetThemedColor(EnvironmentColors.ToolWindowBackgroundColorKey, Colors.Black);
+            var primaryText = ToColor(foreground, GetThemedColor(EnvironmentColors.ToolWindowTextColorKey, Colors.White));
+            var linkColor = GetThemedColor(EnvironmentColors.PanelHyperlinkColorKey, Color.FromRgb(0, 122, 204));
+            var accentColor = GetThemedColor(EnvironmentColors.CommandBarHoverColorKey, linkColor);
+            var isDark = GetPerceivedBrightness(windowBackground) < 0.5d;
+
+            var inlineCodeBackground = Blend(windowBackground, primaryText, isDark ? 0.12d : 0.06d);
+            var inlineCodeBorder = Blend(windowBackground, primaryText, isDark ? 0.22d : 0.14d);
+            var blockBackground = Blend(windowBackground, primaryText, isDark ? 0.10d : 0.05d);
+            var blockBorder = Blend(windowBackground, primaryText, isDark ? 0.18d : 0.12d);
+            var badgeBackground = Blend(windowBackground, primaryText, isDark ? 0.14d : 0.07d);
+            var badgeBorder = Blend(windowBackground, primaryText, isDark ? 0.22d : 0.14d);
+            var iconHoverBackground = Blend(windowBackground, primaryText, isDark ? 0.14d : 0.08d);
+            var iconHoverBorder = Blend(windowBackground, primaryText, isDark ? 0.22d : 0.14d);
+            var iconPressedBackground = Blend(windowBackground, primaryText, isDark ? 0.20d : 0.12d);
+            var iconPressedBorder = Blend(windowBackground, primaryText, isDark ? 0.28d : 0.18d);
+            var toggleTrackOff = Blend(windowBackground, primaryText, isDark ? 0.16d : 0.10d);
+            var toggleTrackOffBorder = Blend(windowBackground, primaryText, isDark ? 0.24d : 0.16d);
+            var toggleThumb = Blend(windowBackground, primaryText, isDark ? 0.92d : 0.01d);
+            var toggleThumbBorder = Blend(windowBackground, primaryText, isDark ? 0.12d : 0.24d);
+
+            var codeComment = isDark ? Color.FromRgb(106, 153, 85) : Color.FromRgb(0, 128, 0);
+            var codeString = isDark ? Color.FromRgb(206, 145, 120) : Color.FromRgb(163, 21, 21);
+            var codeNumber = isDark ? Color.FromRgb(181, 206, 168) : Color.FromRgb(9, 128, 88);
+            var codeProperty = isDark ? Color.FromRgb(156, 220, 254) : Color.FromRgb(0, 26, 193);
+            var codeKeyword = isDark ? Color.FromRgb(86, 156, 214) : Color.FromRgb(0, 0, 255);
+
+            return new MarkdownRenderTheme(
+                windowBackground,
+                primaryText,
+                linkColor,
+                inlineCodeBackground,
+                inlineCodeBorder,
+                blockBackground,
+                blockBorder,
+                badgeBackground,
+                badgeBorder,
+                iconHoverBackground,
+                iconHoverBorder,
+                iconPressedBackground,
+                iconPressedBorder,
+                accentColor,
+                Blend(accentColor, primaryText, isDark ? 0.18d : 0.28d),
+                toggleTrackOff,
+                toggleTrackOffBorder,
+                toggleThumb,
+                toggleThumbBorder,
+                codeComment,
+                codeString,
+                codeNumber,
+                codeProperty,
+                codeKeyword);
+        }
     }
 
     private enum MermaidNodeShape

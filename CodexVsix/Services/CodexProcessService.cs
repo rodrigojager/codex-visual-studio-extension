@@ -2080,7 +2080,7 @@ public sealed class CodexProcessService : IDisposable
 
     private static bool ContainsAny(string text, IEnumerable<string> prefixes)
     {
-        return prefixes.Any(prefix => text.Contains(prefix, StringComparison.Ordinal));
+        return prefixes.Any(prefix => text.IndexOf(prefix, StringComparison.Ordinal) >= 0);
     }
 
     private static string[] CreateLocalizedSet(params Func<LocalizationService, string>[] selectors)

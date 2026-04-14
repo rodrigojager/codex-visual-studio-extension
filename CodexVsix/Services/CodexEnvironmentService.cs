@@ -54,9 +54,14 @@ public sealed class CodexEnvironmentService
                 return status;
             }
 
-            status.HasApiKey = HasApiKey(settings.EnvironmentVariables) || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
-            status.HasAuthFile = HasUsableAuthFile(status.AuthFilePath);
-            status.AccountEmail = status.HasAuthFile ? TryReadAccountEmail(status.AuthFilePath) : string.Empty;
+            // The auth file may contain either OAuth tokens or a persisted OPENAI_API_KEY.
+            // Treat both as authentication signals when computing setup readiness.
+            var authFileInspection = InspectAuthFile(status.AuthFilePath);
+            status.HasAuthFile = authFileInspection.HasUsableAuthFile;
+            status.HasApiKey = HasApiKey(settings.EnvironmentVariables)
+                || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"))
+                || authFileInspection.HasEmbeddedApiKey;
+            status.AccountEmail = authFileInspection.AccountEmail;
 
             status.Stage = status.HasApiKey || status.HasAuthFile
                 ? CodexSetupStage.Ready
@@ -291,33 +296,50 @@ public sealed class CodexEnvironmentService
         return false;
     }
 
-    private static string TryReadAccountEmail(string authFilePath)
+    private static AuthFileInspection InspectAuthFile(string authFilePath)
     {
+        if (string.IsNullOrWhiteSpace(authFilePath) || !File.Exists(authFilePath))
+        {
+            return AuthFileInspection.Empty;
+        }
+
         try
         {
-            if (string.IsNullOrWhiteSpace(authFilePath) || !File.Exists(authFilePath))
-            {
-                return string.Empty;
-            }
-
             var document = JObject.Parse(File.ReadAllText(authFilePath));
+            var embeddedApiKey = document["OPENAI_API_KEY"]?.Value<string>();
             var tokens = document["tokens"] as JObject;
-            var idToken = tokens?["id_token"]?.ToString();
+            var accessToken = tokens?["access_token"]?.Value<string>();
+            var refreshToken = tokens?["refresh_token"]?.Value<string>();
+            var idToken = tokens?["id_token"]?.Value<string>();
+            var hasEmbeddedApiKey = !string.IsNullOrWhiteSpace(embeddedApiKey);
+            // "Usable" means we can authenticate requests (token pair or embedded API key),
+            // not just that profile metadata (id_token) exists.
+            var hasUsableAuthFile = hasEmbeddedApiKey
+                || !string.IsNullOrWhiteSpace(accessToken)
+                || !string.IsNullOrWhiteSpace(refreshToken);
+
             if (string.IsNullOrWhiteSpace(idToken))
             {
-                return string.Empty;
+                return new AuthFileInspection(hasUsableAuthFile, hasEmbeddedApiKey, string.Empty);
             }
 
-            var payload = ParseJwtPayload(idToken);
-            return FirstNonEmptyString(
+            var payload = ParseJwtPayload(idToken!);
+            var accountEmail = FirstNonEmptyString(
                 payload.TryGetValue("email", out var email) ? email?.ToString() : null,
                 payload.TryGetValue("preferred_username", out var preferredUsername) ? preferredUsername?.ToString() : null,
                 tokens?["account_id"]?.ToString());
+
+            return new AuthFileInspection(hasUsableAuthFile, hasEmbeddedApiKey, accountEmail);
         }
         catch
         {
-            return string.Empty;
+            return AuthFileInspection.Empty;
         }
+    }
+
+    private static string FirstNonEmptyString(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     }
 
     private static JObject ParseJwtPayload(string token)
@@ -343,43 +365,6 @@ public sealed class CodexEnvironmentService
         }
 
         return Convert.FromBase64String(normalized);
-    }
-
-    private static string FirstNonEmptyString(params string?[] values)
-    {
-        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
-    }
-
-    private static bool HasUsableAuthFile(string authFilePath)
-    {
-        if (string.IsNullOrWhiteSpace(authFilePath) || !File.Exists(authFilePath))
-        {
-            return false;
-        }
-
-        try
-        {
-            var json = File.ReadAllText(authFilePath);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return false;
-            }
-
-            var auth = JObject.Parse(json);
-            var embeddedApiKey = auth["OPENAI_API_KEY"]?.Value<string>();
-            if (!string.IsNullOrWhiteSpace(embeddedApiKey))
-            {
-                return true;
-            }
-
-            var accessToken = auth["tokens"]?["access_token"]?.Value<string>();
-            var refreshToken = auth["tokens"]?["refresh_token"]?.Value<string>();
-            return !string.IsNullOrWhiteSpace(accessToken) || !string.IsNullOrWhiteSpace(refreshToken);
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private static string QuoteForCommandShell(string value)
@@ -433,5 +418,23 @@ public sealed class CodexEnvironmentService
     private static string QuoteArgument(string value)
     {
         return "\"" + (value ?? string.Empty).Replace("\"", "\\\"") + "\"";
+    }
+
+    private sealed class AuthFileInspection
+    {
+        public static AuthFileInspection Empty { get; } = new(false, false, string.Empty);
+
+        public AuthFileInspection(bool hasUsableAuthFile, bool hasEmbeddedApiKey, string accountEmail)
+        {
+            HasUsableAuthFile = hasUsableAuthFile;
+            HasEmbeddedApiKey = hasEmbeddedApiKey;
+            AccountEmail = accountEmail ?? string.Empty;
+        }
+
+        public bool HasUsableAuthFile { get; }
+
+        public bool HasEmbeddedApiKey { get; }
+
+        public string AccountEmail { get; }
     }
 }

@@ -57,6 +57,7 @@ public partial class CodexToolWindowControl : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        _viewModel.EnsureToolWindowStartupState();
         UpdatePromptTextBoxMaxHeight();
         ScrollChatToEnd();
     }
