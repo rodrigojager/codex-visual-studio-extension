@@ -29,3 +29,7 @@ VSIX extension that adds a docked Codex tool window to Visual Studio 2022 and 20
 - The extension resolves the installed Codex executable from the configured path or the machine environment.
 - The `@file` picker is implemented in the extension UI and inserts relative paths into the prompt.
 - Image support depends on the installed `codex` runtime supporting `--image`.
+
+## Release Notes
+
+- Version 1.1.10 now works better with Light Theme, thanks to [ppd50](https://github.com/ppd50)
