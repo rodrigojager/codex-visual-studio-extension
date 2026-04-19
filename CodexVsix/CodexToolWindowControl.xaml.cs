@@ -24,6 +24,8 @@ public partial class CodexToolWindowControl : UserControl
     private FrameworkElement? _selectionAnchorElement;
     private object? _selectionAnchorPosition;
     private bool _isSelectingAcrossBubbles;
+    private UserInputPromptWindow? _userInputPromptWindow;
+    private bool _suppressUserInputWindowClosedCancel;
 
     public CodexToolWindowControl()
     {
@@ -51,6 +53,7 @@ public partial class CodexToolWindowControl : UserControl
         _viewModel.Messages.CollectionChanged += OnMessagesCollectionChanged;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
         PreviewKeyDown += OnPreviewKeyDown;
     }
@@ -60,6 +63,12 @@ public partial class CodexToolWindowControl : UserControl
         _viewModel.EnsureToolWindowStartupState();
         UpdatePromptTextBoxMaxHeight();
         ScrollChatToEnd();
+        SyncUserInputPromptWindow();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        CloseUserInputPromptWindow(suppressCancel: true);
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -142,6 +151,13 @@ public partial class CodexToolWindowControl : UserControl
         {
             ScrollChatToEnd();
         }
+
+        if (string.IsNullOrEmpty(e.PropertyName)
+            || string.Equals(e.PropertyName, nameof(CodexToolWindowViewModel.CurrentUserInputPrompt), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(CodexToolWindowViewModel.HasCurrentUserInputPrompt), StringComparison.Ordinal))
+        {
+            SyncUserInputPromptWindow();
+        }
     }
 
     private void ScrollChatToEnd()
@@ -223,6 +239,53 @@ public partial class CodexToolWindowControl : UserControl
     {
         ExecuteViewModelCommand(_viewModel.OpenSettingsPanelCommand);
         e.Handled = true;
+    }
+
+    private void OnSetMarkdownViewClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ChatMessage message, Tag: string modeTag })
+        {
+            message.SetMarkdownView(string.Equals(modeTag, "rendered", StringComparison.OrdinalIgnoreCase));
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnRateLimitsContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu contextMenu)
+        {
+            return;
+        }
+
+        var placementDataContext = (contextMenu.PlacementTarget as FrameworkElement)?.DataContext;
+        contextMenu.DataContext = placementDataContext ?? contextMenu.DataContext;
+        if (contextMenu.DataContext is not CodexToolWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        const int staticItemCount = 4;
+        while (contextMenu.Items.Count > staticItemCount)
+        {
+            contextMenu.Items.RemoveAt(contextMenu.Items.Count - 1);
+        }
+
+        if (viewModel.HasRateLimitData)
+        {
+            foreach (var entry in viewModel.RateLimitEntries.Where(item => item is not null && item.HasData))
+            {
+                contextMenu.Items.Add(CreateRateLimitMenuItem(entry));
+            }
+
+            return;
+        }
+
+        contextMenu.Items.Add(new MenuItem
+        {
+            Header = viewModel.Localization.RateLimitsUnavailable,
+            IsEnabled = false
+        });
     }
 
     private void OnCloseSidebarClick(object sender, RoutedEventArgs e)
@@ -473,6 +536,23 @@ public partial class CodexToolWindowControl : UserControl
         return contextMenu;
     }
 
+    private MenuItem CreateRateLimitMenuItem(CodexRateLimitWindowSummary entry)
+    {
+        var menuItem = new MenuItem
+        {
+            Header = entry,
+            HeaderTemplate = TryFindResource("RateLimitPopupEntryTemplate") as DataTemplate,
+            IsEnabled = false
+        };
+
+        if (TryFindResource("PopupMenuItemStyle") is Style style)
+        {
+            menuItem.Style = style;
+        }
+
+        return menuItem;
+    }
+
     private void SelectAllChatText()
     {
         foreach (var element in GetOrderedChatSelectableElements())
@@ -715,6 +795,60 @@ public partial class CodexToolWindowControl : UserControl
         catch (InvalidOperationException)
         {
             return null;
+        }
+    }
+
+    private void SyncUserInputPromptWindow()
+    {
+        if (!_viewModel.HasCurrentUserInputPrompt)
+        {
+            CloseUserInputPromptWindow(suppressCancel: true);
+            return;
+        }
+
+        if (_userInputPromptWindow is null)
+        {
+            _userInputPromptWindow = new UserInputPromptWindow
+            {
+                DataContext = _viewModel
+            };
+            _userInputPromptWindow.Owner = Window.GetWindow(this);
+            _userInputPromptWindow.Closed += OnUserInputPromptWindowClosed;
+            _userInputPromptWindow.Show();
+            return;
+        }
+
+        if (!_userInputPromptWindow.IsVisible)
+        {
+            _userInputPromptWindow.Show();
+        }
+
+        _userInputPromptWindow.Activate();
+    }
+
+    private void CloseUserInputPromptWindow(bool suppressCancel)
+    {
+        if (_userInputPromptWindow is null)
+        {
+            return;
+        }
+
+        _suppressUserInputWindowClosedCancel = suppressCancel;
+        _userInputPromptWindow.Close();
+        _suppressUserInputWindowClosedCancel = false;
+    }
+
+    private void OnUserInputPromptWindowClosed(object? sender, EventArgs e)
+    {
+        if (_userInputPromptWindow is not null)
+        {
+            _userInputPromptWindow.Closed -= OnUserInputPromptWindowClosed;
+            _userInputPromptWindow = null;
+        }
+
+        if (!_suppressUserInputWindowClosedCancel && _viewModel.HasCurrentUserInputPrompt)
+        {
+            _viewModel.DismissUserInputPrompt();
         }
     }
 }

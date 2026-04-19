@@ -13,15 +13,26 @@ public sealed class ChatMessage : INotifyPropertyChanged
     private string? _title;
     private string? _detail;
     private bool _hasCustomDisplayText;
+    private bool _renderMarkdown;
 
-    public ChatMessage(bool isUser, string text, bool isEvent = false, string? title = null, string? detail = null)
+    public ChatMessage(
+        bool isUser,
+        string text,
+        bool isEvent = false,
+        string? title = null,
+        string? detail = null,
+        bool? supportsMarkdownText = null,
+        bool supportsMarkdownDetail = false)
     {
         IsUser = isUser;
         IsEvent = isEvent;
+        SupportsMarkdownText = supportsMarkdownText ?? (!isUser && !isEvent);
+        SupportsMarkdownDetail = supportsMarkdownDetail;
         _title = title;
         _detail = detail;
         _text = text;
         _displayText = text;
+        _renderMarkdown = SupportsMarkdownText || SupportsMarkdownDetail;
         PromptSkillNames.CollectionChanged += HandlePromptSkillNamesChanged;
     }
 
@@ -31,6 +42,10 @@ public sealed class ChatMessage : INotifyPropertyChanged
 
     public bool IsEvent { get; }
 
+    public bool SupportsMarkdownText { get; }
+
+    public bool SupportsMarkdownDetail { get; }
+
     public string? Title
     {
         get => _title;
@@ -39,6 +54,7 @@ public sealed class ChatMessage : INotifyPropertyChanged
             _title = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasTitle));
+            OnPropertyChanged(nameof(HasHeader));
         }
     }
 
@@ -50,12 +66,18 @@ public sealed class ChatMessage : INotifyPropertyChanged
             _detail = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasDetail));
+            OnPropertyChanged(nameof(CanToggleMarkdownView));
+            OnPropertyChanged(nameof(HasHeader));
+            OnPropertyChanged(nameof(ShowMarkdownDetail));
+            OnPropertyChanged(nameof(ShowPlainDetail));
         }
     }
 
     public bool HasTitle => !string.IsNullOrWhiteSpace(Title);
 
     public bool HasDetail => !string.IsNullOrWhiteSpace(Detail);
+
+    public bool HasHeader => HasTitle || CanToggleMarkdownView;
 
     public ObservableCollection<string> PromptSkillNames { get; } = new();
 
@@ -74,6 +96,40 @@ public sealed class ChatMessage : INotifyPropertyChanged
 
     public bool HasDisplayText => !string.IsNullOrWhiteSpace(DisplayText);
 
+    public bool RenderMarkdown
+    {
+        get => _renderMarkdown;
+        set
+        {
+            if (_renderMarkdown == value)
+            {
+                return;
+            }
+
+            _renderMarkdown = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsTextMode));
+            OnPropertyChanged(nameof(IsRenderedMode));
+            OnPropertyChanged(nameof(ShowMarkdownText));
+            OnPropertyChanged(nameof(ShowPlainDetail));
+            OnPropertyChanged(nameof(ShowMarkdownDetail));
+        }
+    }
+
+    public bool IsTextMode => !RenderMarkdown;
+
+    public bool IsRenderedMode => RenderMarkdown;
+
+    public bool CanToggleMarkdownView =>
+        (SupportsMarkdownText && !string.IsNullOrWhiteSpace(Text))
+        || (SupportsMarkdownDetail && HasDetail);
+
+    public bool ShowMarkdownText => SupportsMarkdownText && RenderMarkdown;
+
+    public bool ShowMarkdownDetail => SupportsMarkdownDetail && HasDetail && RenderMarkdown;
+
+    public bool ShowPlainDetail => HasDetail && !ShowMarkdownDetail;
+
     public string Text
     {
         get => _text;
@@ -81,6 +137,9 @@ public sealed class ChatMessage : INotifyPropertyChanged
         {
             _text = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(CanToggleMarkdownView));
+            OnPropertyChanged(nameof(HasHeader));
+            OnPropertyChanged(nameof(ShowMarkdownText));
             if (!_hasCustomDisplayText)
             {
                 DisplayText = value;
@@ -106,6 +165,26 @@ public sealed class ChatMessage : INotifyPropertyChanged
     private void HandlePromptSkillNamesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasPromptSkillNames));
+    }
+
+    public void ToggleMarkdownView()
+    {
+        if (!CanToggleMarkdownView)
+        {
+            return;
+        }
+
+        RenderMarkdown = !RenderMarkdown;
+    }
+
+    public void SetMarkdownView(bool renderMarkdown)
+    {
+        if (!CanToggleMarkdownView)
+        {
+            return;
+        }
+
+        RenderMarkdown = renderMarkdown;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

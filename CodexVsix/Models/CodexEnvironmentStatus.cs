@@ -16,7 +16,11 @@ public sealed class CodexEnvironmentStatus
 
     public bool HasApiKey { get; set; }
 
+    public bool RequiresOpenaiAuth { get; set; } = true;
+
     public string AccountEmail { get; set; } = string.Empty;
+
+    public string AuthenticationLabel { get; set; } = string.Empty;
 
     public string ErrorDetail { get; set; } = string.Empty;
 

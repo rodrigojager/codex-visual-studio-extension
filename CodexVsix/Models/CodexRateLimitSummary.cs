@@ -1,22 +1,14 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace CodexVsix.Models;
 
 public sealed class CodexRateLimitSummary
 {
-    public string PlanLabel { get; set; } = string.Empty;
+    public IReadOnlyList<CodexRateLimitWindowSummary> Entries { get; set; } = Array.Empty<CodexRateLimitWindowSummary>();
 
-    public CodexRateLimitWindowSummary PrimaryWindow { get; set; } = new();
-
-    public CodexRateLimitWindowSummary SecondaryWindow { get; set; } = new();
-
-    public string CreditsLabel { get; set; } = string.Empty;
-
-    public bool HasPrimaryWindow => PrimaryWindow.HasData;
-
-    public bool HasSecondaryWindow => SecondaryWindow.HasData;
-
-    public bool HasCredits => !string.IsNullOrWhiteSpace(CreditsLabel);
-
-    public bool HasAnyData => HasPrimaryWindow || HasSecondaryWindow || HasCredits || !string.IsNullOrWhiteSpace(PlanLabel);
+    public bool HasAnyData => Entries.Any(entry => entry.HasData);
 }
 
 public sealed class CodexRateLimitWindowSummary

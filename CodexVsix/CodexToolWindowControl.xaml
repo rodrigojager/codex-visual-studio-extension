@@ -98,6 +98,51 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="ChatToggleHostBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource ChipBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource EventCardBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+
+        <Style x:Key="ChatToggleSegmentButtonStyle" TargetType="Button" BasedOn="{StaticResource MiniButtonStyle}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="MinWidth" Value="72" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="SegmentBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="11"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SegmentBorder" Property="Background" Value="{StaticResource PopupItemHoverBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="SegmentBorder" Property="Background" Value="{StaticResource PopupItemSelectedBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="TopIconButtonStyle" TargetType="Button" BasedOn="{StaticResource MiniButtonStyle}">
             <Setter Property="Width" Value="24" />
             <Setter Property="Height" Value="24" />
@@ -2023,18 +2068,74 @@
                                             Background="Transparent"
                                             BorderThickness="0">
                                         <StackPanel>
-                                            <TextBox x:Name="EventTitle"
-                                                     Tag="ChatSelectable"
-                                                     Margin="0,0,0,8"
-                                                     Style="{StaticResource ChatMessageTextBoxStyle}"
-                                                     Foreground="{StaticResource TextMutedBrush}"
-                                                     FontSize="10"
-                                                     FontWeight="SemiBold"
-                                                     Text="{Binding Title}"
-                                                     Loaded="OnChatTextBoxLoaded"
-                                                     Unloaded="OnChatTextBoxUnloaded"
-                                                     PreviewMouseLeftButtonDown="OnChatTextBoxPreviewMouseLeftButtonDown"
-                                                     Visibility="Collapsed" />
+                                            <Grid x:Name="MessageHeaderRow"
+                                                  Margin="0,0,0,8"
+                                                  Visibility="Collapsed">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="EventTitle"
+                                                         Grid.Column="0"
+                                                         Tag="ChatSelectable"
+                                                         Margin="0,0,8,0"
+                                                         Style="{StaticResource ChatMessageTextBoxStyle}"
+                                                         Foreground="{StaticResource TextMutedBrush}"
+                                                         FontSize="10"
+                                                         FontWeight="SemiBold"
+                                                         Text="{Binding Title}"
+                                                         Loaded="OnChatTextBoxLoaded"
+                                                         Unloaded="OnChatTextBoxUnloaded"
+                                                         PreviewMouseLeftButtonDown="OnChatTextBoxPreviewMouseLeftButtonDown"
+                                                         Visibility="Collapsed" />
+                                                <Border x:Name="MarkdownToggleHost"
+                                                        Grid.Column="1"
+                                                        Visibility="Collapsed"
+                                                        Style="{StaticResource ChatToggleHostBorderStyle}">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Grid.Column="0"
+                                                                Tag="text"
+                                                                Margin="0,0,2,0"
+                                                                Click="OnSetMarkdownViewClick">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource ChatToggleSegmentButtonStyle}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsTextMode}" Value="True">
+                                                                            <Setter Property="Background" Value="{StaticResource PopupItemSelectedBrush}" />
+                                                                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                            <TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                       Text="{Binding DataContext.Localization.MarkdownTextModeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                        </Button>
+                                                        <Button Grid.Column="1"
+                                                                Tag="rendered"
+                                                                Margin="2,0,0,0"
+                                                                Click="OnSetMarkdownViewClick">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource ChatToggleSegmentButtonStyle}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsRenderedMode}" Value="True">
+                                                                            <Setter Property="Background" Value="{StaticResource PopupItemSelectedBrush}" />
+                                                                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                            <TextBlock Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                       Text="{Binding DataContext.Localization.MarkdownRenderedModeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                        </Button>
+                                                    </Grid>
+                                                </Border>
+                                            </Grid>
                                             <DockPanel LastChildFill="True">
                                                 <ItemsControl x:Name="UserPromptSkillChips"
                                                               DockPanel.Dock="Left"
@@ -2101,31 +2202,60 @@
                                                     BorderThickness="1"
                                                     CornerRadius="10"
                                                     Visibility="Collapsed">
-                                                <TextBox x:Name="EventDetailText"
-                                                         Tag="ChatSelectable"
-                                                         Style="{StaticResource ChatMessageTextBoxStyle}"
-                                                         Foreground="{StaticResource TextSecondaryBrush}"
-                                                         FontFamily="Consolas"
-                                                         FontSize="11"
-                                                         Loaded="OnChatTextBoxLoaded"
-                                                         Unloaded="OnChatTextBoxUnloaded"
-                                                         PreviewMouseLeftButtonDown="OnChatTextBoxPreviewMouseLeftButtonDown"
-                                                         Text="{Binding Detail}" />
+                                                <Grid>
+                                                    <TextBox x:Name="EventDetailText"
+                                                             Tag="ChatSelectable"
+                                                             Style="{StaticResource ChatMessageTextBoxStyle}"
+                                                             Foreground="{StaticResource TextSecondaryBrush}"
+                                                             FontFamily="Consolas"
+                                                             FontSize="11"
+                                                             Loaded="OnChatTextBoxLoaded"
+                                                             Unloaded="OnChatTextBoxUnloaded"
+                                                             PreviewMouseLeftButtonDown="OnChatTextBoxPreviewMouseLeftButtonDown"
+                                                             Text="{Binding Detail}" />
+                                                    <ui:ChatMarkdownViewer x:Name="EventDetailMarkdown"
+                                                                           Tag="ChatSelectable"
+                                                                           Margin="0"
+                                                                           Padding="0"
+                                                                           Background="Transparent"
+                                                                           BorderThickness="0"
+                                                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                                                           FontSize="13"
+                                                                           Loaded="OnChatTextBoxLoaded"
+                                                                           Unloaded="OnChatTextBoxUnloaded"
+                                                                           PreviewMouseLeftButtonDown="OnChatTextBoxPreviewMouseLeftButtonDown"
+                                                                           MarkdownText="{Binding Detail}"
+                                                                           Visibility="Collapsed" />
+                                                </Grid>
                                             </Border>
                                         </StackPanel>
                                     </Border>
                                     <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding HasHeader}" Value="True">
+                                            <Setter TargetName="MessageHeaderRow" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding HasTitle}" Value="True">
                                             <Setter TargetName="EventTitle" Property="Visibility" Value="Visible" />
                                         </DataTrigger>
+                                        <DataTrigger Binding="{Binding CanToggleMarkdownView}" Value="True">
+                                            <Setter TargetName="MarkdownToggleHost" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding HasDetail}" Value="True">
                                             <Setter TargetName="EventDetailHost" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ShowMarkdownDetail}" Value="True">
+                                            <Setter TargetName="EventDetailText" Property="Visibility" Value="Collapsed" />
+                                            <Setter TargetName="EventDetailMarkdown" Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding HasPromptSkillNames}" Value="True">
                                             <Setter TargetName="UserPromptSkillChips" Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding HasDisplayText}" Value="False">
                                             <Setter TargetName="BubbleText" Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ShowMarkdownText}" Value="True">
+                                            <Setter TargetName="BubbleText" Property="Visibility" Value="Collapsed" />
+                                            <Setter TargetName="MarkdownText" Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsUser}" Value="True">
                                             <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right" />
@@ -2139,14 +2269,6 @@
                                             <Setter TargetName="Bubble" Property="Margin" Value="34,34,96,26" />
                                             <Setter TargetName="BubbleText" Property="FontSize" Value="14" />
                                         </DataTrigger>
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding IsUser}" Value="False" />
-                                                <Condition Binding="{Binding IsEvent}" Value="False" />
-                                            </MultiDataTrigger.Conditions>
-                                            <Setter TargetName="BubbleText" Property="Visibility" Value="Collapsed" />
-                                            <Setter TargetName="MarkdownText" Property="Visibility" Value="Visible" />
-                                        </MultiDataTrigger>
                                         <DataTrigger Binding="{Binding IsEvent}" Value="True">
                                             <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch" />
                                             <Setter TargetName="Bubble" Property="MaxWidth" Value="680" />
@@ -3808,7 +3930,8 @@
                                         Click="OnMenuButtonClick">
                                     <Button.ContextMenu>
                                         <ContextMenu Style="{StaticResource PopupContextMenuStyle}"
-                                                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                     Opened="OnRateLimitsContextMenuOpened">
                                             <ContextMenu.Resources>
                                                 <Style TargetType="MenuItem" BasedOn="{StaticResource PopupMenuItemStyle}" />
                                                 <Style TargetType="Separator" BasedOn="{StaticResource PopupSeparatorStyle}" />
@@ -3826,32 +3949,6 @@
                                                       Header="{Binding Localization.RateLimitsTitle}"
                                                       HeaderTemplate="{StaticResource PopupMutedHeaderTemplate}"
                                                       IsEnabled="False" />
-                                            <MenuItem Header="{Binding RateLimitSummary.PrimaryWindow}"
-                                                      HeaderTemplate="{StaticResource RateLimitPopupEntryTemplate}"
-                                                      IsEnabled="False">
-                                                <MenuItem.Style>
-                                                    <Style TargetType="MenuItem" BasedOn="{StaticResource PopupMenuItemStyle}">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding RateLimitSummary.PrimaryWindow.HasData}" Value="False">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </MenuItem.Style>
-                                            </MenuItem>
-                                            <MenuItem Header="{Binding RateLimitSummary.SecondaryWindow}"
-                                                      HeaderTemplate="{StaticResource RateLimitPopupEntryTemplate}"
-                                                      IsEnabled="False">
-                                                <MenuItem.Style>
-                                                    <Style TargetType="MenuItem" BasedOn="{StaticResource PopupMenuItemStyle}">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding RateLimitSummary.SecondaryWindow.HasData}" Value="False">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </MenuItem.Style>
-                                            </MenuItem>
                                         </ContextMenu>
                                     </Button.ContextMenu>
                                     <StackPanel Orientation="Horizontal">
@@ -4061,84 +4158,6 @@
             </Grid>
         </Border>
 
-        <Border Grid.ColumnSpan="2"
-                Panel.ZIndex="41"
-                Background="#8C0B0D10"
-                Visibility="{Binding HasCurrentUserInputPrompt, Converter={StaticResource BoolToVisibilityConverter}}">
-            <Grid>
-                <Border Width="460"
-                        Padding="18"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Background="{StaticResource PopupBrush}"
-                        BorderBrush="{StaticResource PanelBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="18">
-                    <StackPanel DataContext="{Binding CurrentUserInputPrompt}">
-                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
-                                   FontSize="15"
-                                   FontWeight="SemiBold"
-                                   Text="{Binding Title}" />
-
-                        <ItemsControl Margin="0,16,0,0"
-                                      ItemsSource="{Binding Questions}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Margin="0,0,0,14">
-                                        <TextBlock Foreground="{StaticResource TextMutedBrush}"
-                                                   FontSize="11"
-                                                   Text="{Binding Header}" />
-                                        <TextBlock Margin="0,4,0,8"
-                                                   Foreground="{StaticResource TextPrimaryBrush}"
-                                                   Text="{Binding Question}"
-                                                   TextWrapping="Wrap" />
-                                        <ComboBox ItemsSource="{Binding Options}"
-                                                  DisplayMemberPath="Label"
-                                                  SelectedValuePath="Value"
-                                                  SelectedValue="{Binding SelectedOptionValue, UpdateSourceTrigger=PropertyChanged}">
-                                            <ComboBox.Style>
-                                                <Style TargetType="ComboBox" BasedOn="{StaticResource PanelComboBoxStyle}">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding AcceptsText}" Value="True">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </ComboBox.Style>
-                                        </ComboBox>
-                                        <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}">
-                                            <TextBox.Style>
-                                                <Style TargetType="TextBox" BasedOn="{StaticResource PanelTextBoxStyle}">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding AcceptsText}" Value="False">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBox.Style>
-                                        </TextBox>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <StackPanel Margin="0,8,0,0"
-                                    Orientation="Horizontal"
-                                    HorizontalAlignment="Right">
-                            <Button Margin="0,0,10,0"
-                                    Style="{StaticResource ApprovalActionButtonStyle}"
-                                    Content="{Binding DataContext.Localization.ApprovalCancel, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    Command="{Binding DataContext.CancelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                            <Button Style="{StaticResource ApprovalActionButtonStyle}"
-                                    Background="{StaticResource SendButtonBrush}"
-                                    Content="{Binding DataContext.Localization.InsertButton, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    Command="{Binding DataContext.ResolveUserInputCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </Border>
     </Grid>
 </UserControl>
 

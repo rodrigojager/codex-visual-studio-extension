@@ -41,6 +41,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private CancellationTokenSource? _cts;
     private ChatMessage? _currentAssistantMessage;
+    private ChatMessage? _currentPlanMessage;
     private ChatMessage? _currentTransientStatusMessage;
     private bool _isBusy;
     private bool _isStopping;
@@ -58,8 +59,10 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private string _selectedVerbosity = string.Empty;
     private string _promptDisplayText = string.Empty;
     private Geometry _contextRingGeometry = Geometry.Parse("M 8,1 A 7,7 0 1 1 7.99,1");
+    private const double ContextWindowBaselineTokens = 12000d;
     private double _contextTokenBudget = DefaultContextTokenBudget;
-    private double _lastKnownRemainingTokens = DefaultContextTokenBudget;
+    private double _lastKnownContextTokensInWindow;
+    private double _lastKnownRemainingTokens = DefaultContextTokenBudget - ContextWindowBaselineTokens;
     private ApprovalPromptViewModel? _currentApprovalPrompt;
     private TaskCompletionSource<JToken?>? _approvalDecisionTcs;
     private UserInputPromptViewModel? _currentUserInputPrompt;
@@ -100,6 +103,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _codexProcessService.ApprovalRequestHandler = HandleApprovalRequestAsync;
         _codexProcessService.UserInputRequestHandler = HandleUserInputRequestAsync;
         _codexProcessService.ThreadCatalogChanged += HandleThreadCatalogChanged;
+        _codexProcessService.RateLimitsUpdated += HandleRateLimitsUpdated;
+        _codexProcessService.AccountUpdated += HandleAccountUpdated;
 
         SendCommand = new DelegateCommand(Send, () => !IsBusy && IsCodexReady && !string.IsNullOrWhiteSpace(BuildEffectivePrompt()));
         CancelCommand = new DelegateCommand(Cancel, () => IsBusy && !IsStopping);
@@ -193,6 +198,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         Threads.CollectionChanged -= HandleThreadsChanged;
         Messages.CollectionChanged -= HandleMessagesChanged;
         _codexProcessService.ThreadCatalogChanged -= HandleThreadCatalogChanged;
+        _codexProcessService.RateLimitsUpdated -= HandleRateLimitsUpdated;
+        _codexProcessService.AccountUpdated -= HandleAccountUpdated;
         _codexProcessService.Dispose();
     }
 
@@ -484,9 +491,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public bool NeedsCodexInstall => CodexEnvironmentStatus.Stage == CodexSetupStage.MissingExecutable;
 
-    public bool NeedsCodexLogin => CodexEnvironmentStatus.Stage == CodexSetupStage.MissingAuthentication;
+    public bool NeedsCodexLogin => CodexEnvironmentStatus.Stage == CodexSetupStage.MissingAuthentication
+        && CodexEnvironmentStatus.RequiresOpenaiAuth;
 
     public bool CanRunCodexLogin => CodexEnvironmentStatus.Stage == CodexSetupStage.MissingAuthentication
+        && CodexEnvironmentStatus.RequiresOpenaiAuth
         && !string.IsNullOrWhiteSpace(CodexEnvironmentStatus.ResolvedExecutablePath);
 
     public bool CanLogOutAndLogIn => !string.IsNullOrWhiteSpace(GetLoginExecutablePath());
@@ -495,7 +504,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         CodexSetupStage.Checking => _localization.SetupCheckingTitle,
         CodexSetupStage.MissingExecutable => _localization.SetupMissingExecutableTitle,
-        CodexSetupStage.MissingAuthentication => _localization.SetupMissingAuthTitle,
+        CodexSetupStage.MissingAuthentication => CodexEnvironmentStatus.RequiresOpenaiAuth
+            ? _localization.SetupMissingAuthTitle
+            : _localization.SetupMissingProviderAuthTitle,
         CodexSetupStage.Ready => _localization.SetupReadyTitle,
         CodexSetupStage.Error => _localization.SetupErrorTitle,
         _ => _localization.SetupCheckingTitle
@@ -505,7 +516,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         CodexSetupStage.Checking => _localization.SetupCheckingSummary,
         CodexSetupStage.MissingExecutable => _localization.SetupMissingExecutableSummary,
-        CodexSetupStage.MissingAuthentication => _localization.SetupMissingAuthSummary,
+        CodexSetupStage.MissingAuthentication => CodexEnvironmentStatus.RequiresOpenaiAuth
+            ? _localization.SetupMissingAuthSummary
+            : _localization.SetupMissingProviderAuthSummary,
         CodexSetupStage.Ready => _localization.SetupReadySummary,
         CodexSetupStage.Error => _localization.SetupErrorSummary,
         _ => string.Empty
@@ -514,7 +527,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public string CodexSetupDetail => CodexEnvironmentStatus.Stage switch
     {
         CodexSetupStage.MissingExecutable => _localization.SetupInstallDetail,
-        CodexSetupStage.MissingAuthentication => _localization.SetupMissingAuthDetail,
+        CodexSetupStage.MissingAuthentication => CodexEnvironmentStatus.RequiresOpenaiAuth
+            ? _localization.SetupMissingAuthDetail
+            : _localization.SetupMissingProviderAuthDetail,
         CodexSetupStage.Error => CodexEnvironmentStatus.ErrorDetail,
         _ => string.Empty
     };
@@ -529,6 +544,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         get
         {
+            if (!string.IsNullOrWhiteSpace(CodexEnvironmentStatus.AuthenticationLabel))
+            {
+                return CodexEnvironmentStatus.AuthenticationLabel;
+            }
+
             if (CodexEnvironmentStatus.HasApiKey)
             {
                 return _localization.SetupApiKeyLabel;
@@ -552,6 +572,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             if (CodexEnvironmentStatus.HasAccountEmail)
             {
                 return CodexEnvironmentStatus.AccountEmail;
+            }
+
+            if (!string.IsNullOrWhiteSpace(CodexEnvironmentStatus.AuthenticationLabel))
+            {
+                return CodexEnvironmentStatus.AuthenticationLabel;
             }
 
             if (CodexEnvironmentStatus.HasApiKey)
@@ -833,8 +858,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public string ContextWindowDetail => string.Format(
         CultureInfo.CurrentUICulture,
         _localization.ContextWindowDetailFormat,
-        FormatPercent(Math.Max(0d, (_contextTokenBudget - _lastKnownRemainingTokens) / _contextTokenBudget)),
-        FormatPercent(Math.Max(0d, _lastKnownRemainingTokens / _contextTokenBudget)));
+        FormatPercent(GetContextUsedRatio(_lastKnownContextTokensInWindow, _contextTokenBudget)),
+        FormatPercent(GetContextRemainingRatio(_lastKnownContextTokensInWindow, _contextTokenBudget)));
 
     public string SkillSearchText
     {
@@ -922,10 +947,16 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             _rateLimitSummary = value ?? new CodexRateLimitSummary();
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasRateLimitData));
+            OnPropertyChanged(nameof(RateLimitEntries));
+            OnPropertyChanged(nameof(ShowRateLimitUnavailableEntry));
         }
     }
 
     public bool HasRateLimitData => RateLimitSummary.HasAnyData;
+
+    public IEnumerable<CodexRateLimitWindowSummary> RateLimitEntries => RateLimitSummary.Entries;
+
+    public bool ShowRateLimitUnavailableEntry => !HasRateLimitData;
 
     public bool HasPreferredMcpServers => (Settings.PreferredMcpServers?.Count ?? 0) > 0;
 
@@ -1109,6 +1140,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         IsStopping = false;
         _cts = new CancellationTokenSource();
         _currentAssistantMessage = null;
+        _currentPlanMessage = null;
         ClearTransientStatusMessage();
         Prompt = string.Empty;
 
@@ -1140,11 +1172,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                         AddRuntimeEventMessage(message);
                     }
                 },
-                onTokenUsage: (totalTokens, contextWindow) =>
+                onTokenUsage: (tokensInContextWindow, contextWindow) =>
                 {
                     if (IsConversationStateCurrent(conversationStateVersion))
                     {
-                        UpdateTokenUsage(totalTokens, contextWindow);
+                        UpdateTokenUsage(tokensInContextWindow, contextWindow);
                     }
                 },
                 cancellationToken: _cts.Token);
@@ -1308,9 +1340,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _approvalDecisionTcs?.TrySetResult(JValue.CreateString("cancel"));
         CurrentApprovalPrompt = null;
         _approvalDecisionTcs = null;
-        _userInputDecisionTcs?.TrySetResult(new JObject { ["answers"] = new JObject() });
-        CurrentUserInputPrompt = null;
-        _userInputDecisionTcs = null;
+        DismissUserInputPrompt();
         var cts = _cts;
         _cts = null;
         _codexProcessService.CancelActiveTurn();
@@ -1318,6 +1348,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         cts?.Dispose();
         ClearTransientStatusMessage();
         _currentAssistantMessage = null;
+        _currentPlanMessage = null;
         IsStopping = false;
         IsBusy = false;
     }
@@ -2423,10 +2454,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             RunOnUiThread(() =>
             {
                 _currentAssistantMessage = null;
+                _currentPlanMessage = null;
                 Messages.Clear();
                 foreach (var message in conversation.Messages)
                 {
-                    Messages.Add(CreateDisplayMessage(message.IsUser, message.Text, message.IsEvent, message.Title, message.Detail));
+                    Messages.Add(CreateDisplayMessage(message));
                 }
 
                 Output = string.Empty;
@@ -2468,6 +2500,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _approvalDecisionTcs = null;
         CurrentApprovalPrompt = null;
         _currentAssistantMessage = null;
+        _currentPlanMessage = null;
         Settings.CurrentThreadId = string.Empty;
         Settings.LastThreadWorkingDirectory = Settings.WorkingDirectory;
         _codexProcessService.ResetThread();
@@ -2762,6 +2795,24 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         OnPropertyChanged(nameof(HasManagedMcpServers));
     }
 
+    private void HandleRateLimitsUpdated(CodexRateLimitSummary summary)
+    {
+        RunOnUiThread(() => RateLimitSummary = summary);
+    }
+
+    private void HandleAccountUpdated()
+    {
+        ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+        {
+            if (!IsCodexReady)
+            {
+                return;
+            }
+
+            await RefreshServerSurfacesAsync(forceSkillReload: false).ConfigureAwait(false);
+        });
+    }
+
     private void HandleThreadsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasThreads));
@@ -2820,10 +2871,24 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         };
     }
 
-    private ChatMessage CreateDisplayMessage(bool isUser, string text, bool isEvent = false, string? title = null, string? detail = null)
+    private ChatMessage CreateDisplayMessage(bool isUser, string text, bool isEvent = false, string? title = null, string? detail = null, bool? supportsMarkdownText = null, bool supportsMarkdownDetail = false)
     {
-        var message = new ChatMessage(isUser, text, isEvent, title, detail);
+        var message = new ChatMessage(isUser, text, isEvent, title, detail, supportsMarkdownText, supportsMarkdownDetail);
         DecorateUserMessageDisplay(message);
+        return message;
+    }
+
+    private ChatMessage CreateDisplayMessage(ChatMessage source)
+    {
+        var message = CreateDisplayMessage(
+            source.IsUser,
+            source.Text,
+            source.IsEvent,
+            source.Title,
+            source.Detail,
+            source.SupportsMarkdownText,
+            source.SupportsMarkdownDetail);
+        message.RenderMarkdown = source.RenderMarkdown;
         return message;
     }
 
@@ -2887,6 +2952,17 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         });
     }
 
+    internal void DismissUserInputPrompt()
+    {
+        var tcs = _userInputDecisionTcs;
+        CurrentUserInputPrompt = null;
+        _userInputDecisionTcs = null;
+        tcs?.TrySetResult(new JObject
+        {
+            ["answers"] = new JObject()
+        });
+    }
+
     private void AddPromptToHistory(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt))
@@ -2935,9 +3011,26 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
+            if (IsPlanEvent(message))
+            {
+                if (_currentPlanMessage is null || !Messages.Contains(_currentPlanMessage))
+                {
+                    _currentPlanMessage = CreateDisplayMessage(message);
+                    Messages.Add(_currentPlanMessage);
+                }
+                else
+                {
+                    _currentPlanMessage.Title = message.Title;
+                    _currentPlanMessage.Text = message.Text;
+                    _currentPlanMessage.Detail = message.Detail;
+                }
+
+                return;
+            }
+
             if (_currentTransientStatusMessage is null)
             {
-                _currentTransientStatusMessage = CreateDisplayMessage(message.IsUser, message.Text, message.IsEvent, message.Title, message.Detail);
+                _currentTransientStatusMessage = CreateDisplayMessage(message);
                 Messages.Add(_currentTransientStatusMessage);
             }
             else
@@ -2971,21 +3064,24 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         AppendOutput("[" + _localization.OutputTagStderr + "] " + text);
     }
 
-    private void UpdateTokenUsage(long totalTokens, long? contextWindow)
+    private void UpdateTokenUsage(long tokensInContextWindow, long? contextWindow)
     {
         if (contextWindow.HasValue && contextWindow.Value > 0)
         {
             _contextTokenBudget = contextWindow.Value;
         }
 
+        var clampedTokens = Math.Max(0d, tokensInContextWindow);
+
         RunOnUiThread(() =>
         {
-            _lastKnownRemainingTokens = Math.Max(0d, _contextTokenBudget - totalTokens);
+            _lastKnownContextTokensInWindow = clampedTokens;
+            _lastKnownRemainingTokens = GetContextRemainingTokenCount(clampedTokens, _contextTokenBudget);
             OnPropertyChanged(nameof(ContextTokensLabel));
             OnPropertyChanged(nameof(ContextWindowDetail));
         });
 
-        SetContextRemainingRatio(Math.Max(0d, 1d - (totalTokens / _contextTokenBudget)));
+        SetContextRemainingRatio(GetContextRemainingRatio(clampedTokens, _contextTokenBudget));
     }
 
     private void UpdateContextEstimate()
@@ -2995,11 +3091,12 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         var estimated = estimatedPromptTokens + estimatedImageTokens;
         RunOnUiThread(() =>
         {
-            _lastKnownRemainingTokens = Math.Max(0d, _contextTokenBudget - estimated);
+            _lastKnownContextTokensInWindow = estimated;
+            _lastKnownRemainingTokens = GetContextRemainingTokenCount(estimated, _contextTokenBudget);
             OnPropertyChanged(nameof(ContextTokensLabel));
             OnPropertyChanged(nameof(ContextWindowDetail));
         });
-        SetContextRemainingRatio(Math.Max(0d, 1d - (estimated / _contextTokenBudget)));
+        SetContextRemainingRatio(GetContextRemainingRatio(estimated, _contextTokenBudget));
     }
 
     private void SetContextRemainingRatio(double ratio)
@@ -3007,16 +3104,91 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ContextRingGeometry = BuildRingGeometry(ratio);
     }
 
+    private static double GetContextRemainingRatio(double tokensInContextWindow, double contextWindow)
+    {
+        if (contextWindow <= ContextWindowBaselineTokens)
+        {
+            return 0d;
+        }
+
+        var effectiveWindow = contextWindow - ContextWindowBaselineTokens;
+        var used = Math.Max(0d, tokensInContextWindow - ContextWindowBaselineTokens);
+        var remaining = Math.Max(0d, effectiveWindow - used);
+        return Math.Max(0d, Math.Min(1d, remaining / effectiveWindow));
+    }
+
+    private static double GetContextRemainingTokenCount(double tokensInContextWindow, double contextWindow)
+    {
+        if (contextWindow <= ContextWindowBaselineTokens)
+        {
+            return 0d;
+        }
+
+        var effectiveWindow = contextWindow - ContextWindowBaselineTokens;
+        var used = Math.Max(0d, tokensInContextWindow - ContextWindowBaselineTokens);
+        return Math.Max(0d, effectiveWindow - used);
+    }
+
+    private static double GetContextUsedRatio(double tokensInContextWindow, double contextWindow)
+    {
+        return 1d - GetContextRemainingRatio(tokensInContextWindow, contextWindow);
+    }
+
     private static Geometry BuildRingGeometry(double ratio)
     {
-        _ = ratio;
-        var geometry = Geometry.Parse("M 8,1 A 7,7 0 1 1 7.99,1");
+        var clampedRatio = Math.Max(0d, Math.Min(1d, ratio));
+        if (clampedRatio >= 0.9995d)
+        {
+            var fullCircle = Geometry.Parse("M 8,1 A 7,7 0 1 1 7.99,1");
+            if (fullCircle.CanFreeze)
+            {
+                fullCircle.Freeze();
+            }
+
+            return fullCircle;
+        }
+
+        if (clampedRatio <= 0d)
+        {
+            return Geometry.Empty;
+        }
+
+        const double center = 8d;
+        const double radius = 7d;
+        var sweepAngle = clampedRatio * 359.999d;
+        var startAngle = -90d;
+        var endAngle = startAngle + sweepAngle;
+        var startPoint = PointOnCircle(center, radius, startAngle);
+        var endPoint = PointOnCircle(center, radius, endAngle);
+
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(startPoint, isFilled: false, isClosed: false);
+            context.ArcTo(
+                endPoint,
+                new Size(radius, radius),
+                rotationAngle: 0d,
+                isLargeArc: sweepAngle > 180d,
+                sweepDirection: SweepDirection.Clockwise,
+                isStroked: true,
+                isSmoothJoin: false);
+        }
+
         if (geometry.CanFreeze)
         {
             geometry.Freeze();
         }
 
         return geometry;
+    }
+
+    private static Point PointOnCircle(double center, double radius, double angleDegrees)
+    {
+        var radians = angleDegrees * Math.PI / 180d;
+        return new Point(
+            center + (Math.Cos(radians) * radius),
+            center + (Math.Sin(radians) * radius));
     }
 
     private void ClearTransientStatusMessage()
@@ -3039,12 +3211,18 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             for (var index = Messages.Count - 1; index >= 0; index--)
             {
-                if (Messages[index].IsEvent)
+                if (Messages[index].IsEvent && !IsPlanEvent(Messages[index]))
                 {
                     Messages.RemoveAt(index);
                 }
             }
         });
+    }
+
+    private bool IsPlanEvent(ChatMessage message)
+    {
+        return message.IsEvent
+            && string.Equals(message.Title, _localization.EventPlanTitle, StringComparison.CurrentCulture);
     }
 
     private void AppendFileReferenceToPrompt(string filePath)

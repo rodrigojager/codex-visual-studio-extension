@@ -1,0 +1,153 @@
+<Window x:Class="CodexVsix.UserInputPromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:themes="clr-namespace:Microsoft.VisualStudio.PlatformUI;assembly=Microsoft.VisualStudio.Shell.15.0"
+        Title="{Binding Localization.UserInputTitle}"
+        Width="520"
+        MinWidth="420"
+        MaxWidth="680"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBackgroundBrushKey}}">
+    <Window.Resources>
+        <SolidColorBrush x:Key="WindowBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBackgroundColorKey}}" />
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowBorderColorKey}}" />
+        <SolidColorBrush x:Key="InputBorderBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.PanelBorderColorKey}}" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.ToolWindowTextColorKey}}" />
+        <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.SystemGrayTextColorKey}}" />
+        <SolidColorBrush x:Key="PopupBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.CommandBarMenuBackgroundGradientBeginColorKey}}" />
+        <SolidColorBrush x:Key="ControlHoverBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.CommandBarHoverColorKey}}" />
+        <SolidColorBrush x:Key="PrimaryButtonBrush" Color="{DynamicResource {x:Static themes:EnvironmentColors.CommandBarHoverColorKey}}" />
+
+        <Style x:Key="PromptTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource WindowBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Margin" Value="0,0,0,2" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="MinHeight" Value="38" />
+        </Style>
+
+        <Style x:Key="PromptComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Background" Value="{StaticResource WindowBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="MinHeight" Value="34" />
+        </Style>
+
+        <Style x:Key="PromptButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{StaticResource InputBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{StaticResource ControlHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Margin="16"
+            Padding="18"
+            Background="{StaticResource PopupBrush}"
+            BorderBrush="{StaticResource PanelBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="16">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      MaxHeight="520">
+            <StackPanel>
+                <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                           FontSize="15"
+                           FontWeight="SemiBold"
+                           Text="{Binding CurrentUserInputPrompt.Title}" />
+
+                <ItemsControl Margin="0,16,0,0"
+                              ItemsSource="{Binding CurrentUserInputPrompt.Questions}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,0,14">
+                                <TextBlock Foreground="{StaticResource TextMutedBrush}"
+                                           FontSize="11"
+                                           Text="{Binding Header}" />
+                                <TextBlock Margin="0,4,0,8"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Text="{Binding Question}"
+                                           TextWrapping="Wrap" />
+                                <ComboBox ItemsSource="{Binding Options}"
+                                          DisplayMemberPath="Label"
+                                          SelectedValuePath="Value"
+                                          SelectedValue="{Binding SelectedOptionValue, UpdateSourceTrigger=PropertyChanged}">
+                                    <ComboBox.Style>
+                                        <Style TargetType="ComboBox" BasedOn="{StaticResource PromptComboBoxStyle}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding AcceptsText}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ComboBox.Style>
+                                </ComboBox>
+                                <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}">
+                                    <TextBox.Style>
+                                        <Style TargetType="TextBox" BasedOn="{StaticResource PromptTextBoxStyle}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding AcceptsText}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBox.Style>
+                                </TextBox>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Margin="0,8,0,0"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button Margin="0,0,10,0"
+                            Style="{StaticResource PromptButtonStyle}"
+                            Content="{Binding Localization.ApprovalCancel}"
+                            Command="{Binding CancelCommand}" />
+                    <Button Style="{StaticResource PromptButtonStyle}"
+                            Background="{StaticResource PrimaryButtonBrush}"
+                            BorderBrush="{StaticResource PrimaryButtonBrush}"
+                            Content="{Binding Localization.InsertButton}"
+                            Command="{Binding ResolveUserInputCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</Window>

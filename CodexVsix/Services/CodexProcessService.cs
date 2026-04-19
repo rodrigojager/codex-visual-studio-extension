@@ -50,6 +50,8 @@ public sealed class CodexProcessService : IDisposable
     public Func<CodexApprovalRequest, Task<JToken?>>? ApprovalRequestHandler { get; set; }
     public Func<CodexUserInputRequest, Task<JObject?>>? UserInputRequestHandler { get; set; }
     public event Action? ThreadCatalogChanged;
+    public event Action<CodexRateLimitSummary>? RateLimitsUpdated;
+    public event Action? AccountUpdated;
 
     public string? CurrentThreadId
     {
@@ -618,7 +620,7 @@ public sealed class CodexProcessService : IDisposable
         await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
 
         var response = await SendRequestAsync("account/rateLimits/read", new { }, cancellationToken).ConfigureAwait(false);
-        return BuildRateLimitSummary(response?["rateLimits"] ?? response?["rate_limits"]);
+        return BuildRateLimitSummary(response);
     }
 
     public void InvalidateSkillsCache()
@@ -993,8 +995,16 @@ public sealed class CodexProcessService : IDisposable
                 HandleAgentMessageDelta(parameters);
                 break;
 
+            case "item/plan/delta":
+                HandlePlanDelta(parameters);
+                break;
+
             case "item/completed":
                 HandleCompletedItem(parameters);
+                break;
+
+            case "turn/plan/updated":
+                HandleTurnPlanUpdated(parameters);
                 break;
 
             case "turn/completed":
@@ -1029,6 +1039,14 @@ public sealed class CodexProcessService : IDisposable
             case "thread/status/changed":
             case "thread/closed/updated":
                 NotifyThreadCatalogChanged();
+                break;
+
+            case "account/rateLimits/updated":
+                PublishRateLimitsUpdate(parameters);
+                break;
+
+            case "account/updated":
+                AccountUpdated?.Invoke();
                 break;
 
             case "skills/changed":
@@ -1093,6 +1111,37 @@ public sealed class CodexProcessService : IDisposable
         }
     }
 
+    private void HandlePlanDelta(JToken? parameters)
+    {
+        if (!MatchesActiveTurn(parameters?["turnId"]?.Value<string>()))
+        {
+            return;
+        }
+
+        var delta = parameters?["delta"]?.Value<string>();
+        if (string.IsNullOrWhiteSpace(delta))
+        {
+            return;
+        }
+
+        var itemId = parameters?["itemId"]?.Value<string>();
+        string accumulatedPlan;
+
+        ActiveTurnState? turnState;
+        lock (_syncRoot)
+        {
+            turnState = _activeTurn;
+            if (turnState is null)
+            {
+                return;
+            }
+
+            accumulatedPlan = turnState.AppendPlanDelta(itemId, delta!);
+        }
+
+        turnState.OnEventMessage?.Invoke(CreatePlanEventMessage(accumulatedPlan));
+    }
+
     private void HandleAgentMessageEvent(JToken? parameters)
     {
         if (!MatchesActiveTurnEvent(parameters))
@@ -1128,6 +1177,41 @@ public sealed class CodexProcessService : IDisposable
         PublishAssistantOutput(turnState, message, skipIfAlreadyPublished: true);
     }
 
+    private void HandleTurnPlanUpdated(JToken? parameters)
+    {
+        if (!MatchesActiveTurn(parameters?["turnId"]?.Value<string>()))
+        {
+            return;
+        }
+
+        ActiveTurnState? turnState;
+        lock (_syncRoot)
+        {
+            turnState = _activeTurn;
+        }
+
+        if (turnState is null)
+        {
+            return;
+        }
+
+        var planMarkdown = BuildStructuredPlanMarkdown(
+            parameters?["explanation"]?.Value<string>(),
+            parameters?["plan"] as JArray,
+            GetLocalization());
+        if (string.IsNullOrWhiteSpace(planMarkdown))
+        {
+            return;
+        }
+
+        lock (_syncRoot)
+        {
+            turnState.SetPlanText(null, planMarkdown);
+        }
+
+        turnState.OnEventMessage?.Invoke(CreatePlanEventMessage(planMarkdown));
+    }
+
     private void HandleTaskCompleteEvent(JToken? parameters)
     {
         if (!MatchesActiveTurnEvent(parameters))
@@ -1158,12 +1242,17 @@ public sealed class CodexProcessService : IDisposable
         }
 
         var info = parameters?["msg"]?["info"];
-        var totalTokens = GetNestedToken(info, "total_token_usage", "total_tokens")?.Value<long?>() ?? 0L;
-        var contextWindow = GetNestedToken(info, "model_context_window")?.Value<long?>();
+        var tokensInContextWindow = GetNestedToken(info, "last_token_usage", "total_tokens")?.Value<long?>()
+            ?? GetNestedToken(info, "lastTokenUsage", "totalTokens")?.Value<long?>()
+            ?? GetNestedToken(info, "total_token_usage", "total_tokens")?.Value<long?>()
+            ?? GetNestedToken(info, "totalTokenUsage", "totalTokens")?.Value<long?>()
+            ?? 0L;
+        var contextWindow = GetNestedToken(info, "model_context_window")?.Value<long?>()
+            ?? GetNestedToken(info, "modelContextWindow")?.Value<long?>();
 
         lock (_syncRoot)
         {
-            _activeTurn?.OnTokenUsage?.Invoke(totalTokens, contextWindow);
+            _activeTurn?.OnTokenUsage?.Invoke(tokensInContextWindow, contextWindow);
         }
     }
 
@@ -1208,6 +1297,24 @@ public sealed class CodexProcessService : IDisposable
             return;
         }
 
+        if (string.Equals(itemType, "plan", StringComparison.OrdinalIgnoreCase))
+        {
+            var itemId = item?["id"]?.Value<string>();
+            string? planText;
+            lock (_syncRoot)
+            {
+                planText = turnState.GetPlanText(itemId);
+            }
+
+            if (string.IsNullOrWhiteSpace(planText))
+            {
+                planText = NormalizeDetail(item?["text"]?.Value<string>(), maxLength: null);
+            }
+
+            turnState.OnEventMessage?.Invoke(CreatePlanEventMessage(planText));
+            return;
+        }
+
         if (!string.Equals(itemType, "agentMessage", StringComparison.OrdinalIgnoreCase))
         {
             var eventMessage = BuildThreadEventMessage(item);
@@ -1219,8 +1326,8 @@ public sealed class CodexProcessService : IDisposable
             return;
         }
 
-        var itemId = item?["id"]?.Value<string>();
-        if (!string.IsNullOrWhiteSpace(itemId) && turnState.StreamedItemIds.Contains(itemId!))
+        var agentItemId = item?["id"]?.Value<string>();
+        if (!string.IsNullOrWhiteSpace(agentItemId) && turnState.StreamedItemIds.Contains(agentItemId!))
         {
             return;
         }
@@ -1264,12 +1371,19 @@ public sealed class CodexProcessService : IDisposable
             return;
         }
 
-        var totalTokens = GetNestedToken(parameters?["tokenUsage"], "total", "totalTokens")?.Value<long?>() ?? 0L;
+        var tokenUsage = parameters?["tokenUsage"];
+        var tokensInContextWindow = GetNestedToken(tokenUsage, "last", "totalTokens")?.Value<long?>()
+            ?? GetNestedToken(tokenUsage, "lastTokenUsage", "totalTokens")?.Value<long?>()
+            ?? GetNestedToken(tokenUsage, "last_token_usage", "total_tokens")?.Value<long?>()
+            ?? GetNestedToken(tokenUsage, "total", "totalTokens")?.Value<long?>()
+            ?? GetNestedToken(tokenUsage, "totalTokenUsage", "totalTokens")?.Value<long?>()
+            ?? GetNestedToken(tokenUsage, "total_token_usage", "total_tokens")?.Value<long?>()
+            ?? 0L;
         var contextWindow = GetNestedToken(parameters?["tokenUsage"], "modelContextWindow")?.Value<long?>();
 
         lock (_syncRoot)
         {
-            _activeTurn?.OnTokenUsage?.Invoke(totalTokens, contextWindow);
+            _activeTurn?.OnTokenUsage?.Invoke(tokensInContextWindow, contextWindow);
         }
     }
 
@@ -1654,108 +1768,494 @@ public sealed class CodexProcessService : IDisposable
             : string.Empty;
     }
 
-    private static CodexRateLimitSummary BuildRateLimitSummary(JToken? snapshot)
+    private void PublishRateLimitsUpdate(JObject? parameters)
     {
-        if (snapshot is null)
+        RateLimitsUpdated?.Invoke(BuildRateLimitSummary(parameters));
+    }
+
+    private CodexRateLimitSummary BuildRateLimitSummary(JToken? response)
+    {
+        var snapshots = ResolveRateLimitSnapshots(response);
+        if (snapshots.Count == 0)
         {
             return new CodexRateLimitSummary();
         }
 
-        var primary = snapshot["primary"];
-        var secondary = snapshot["secondary"];
-        var credits = snapshot["credits"];
-        var planType = snapshot["planType"]?.Value<string>() ?? snapshot["plan_type"]?.Value<string>() ?? string.Empty;
+        var localization = new LocalizationService(_languageOverride);
 
         return new CodexRateLimitSummary
         {
-            PlanLabel = string.IsNullOrWhiteSpace(planType) ? string.Empty : planType,
-            PrimaryWindow = BuildRateLimitWindowSummary(primary),
-            SecondaryWindow = BuildRateLimitWindowSummary(secondary),
-            CreditsLabel = BuildCreditsLabel(credits)
+            Entries = BuildRateLimitEntries(snapshots, localization)
         };
     }
 
-    private static CodexRateLimitWindowSummary BuildRateLimitWindowSummary(JToken? window)
+    private static IReadOnlyList<JObject> ResolveRateLimitSnapshots(JToken? response)
     {
-        if (window is null)
-        {
-            return new CodexRateLimitWindowSummary();
-        }
+        var snapshots = new List<JObject>();
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var usedPercent = window["usedPercent"]?.Value<double?>()
-            ?? window["used_percent"]?.Value<double?>();
-        var remainingPercent = window["remainingPercent"]?.Value<double?>()
-            ?? window["remaining_percent"]?.Value<double?>();
-        var durationMinutes = window["windowDurationMins"]?.Value<int?>()
-            ?? window["window_duration_mins"]?.Value<int?>();
-        var resetsAtSeconds = window["resetsAt"]?.Value<long?>()
-            ?? window["resets_at"]?.Value<long?>();
+        AppendRateLimitSnapshotsFromMap(snapshots, seenKeys, response?["rateLimitsByLimitId"]);
+        AppendRateLimitSnapshotsFromMap(snapshots, seenKeys, response?["rate_limits_by_limit_id"]);
+        AppendRateLimitSnapshotsFromMap(snapshots, seenKeys, response?["account"]?["rateLimitsByLimitId"]);
+        AppendRateLimitSnapshotsFromMap(snapshots, seenKeys, response?["account"]?["rate_limits_by_limit_id"]);
 
-        var effectiveRemainingPercent = remainingPercent
-            ?? (usedPercent.HasValue ? Math.Max(0d, 100d - usedPercent.Value) : 0d);
-        var usageText = Math.Round(effectiveRemainingPercent).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "%";
-        var title = string.Empty;
-        var detailParts = new List<string>();
-        if (durationMinutes.HasValue && durationMinutes.Value > 0)
-        {
-            title = BuildRateLimitWindowDurationLabel(durationMinutes.Value);
-        }
+        AddRateLimitSnapshot(snapshots, seenKeys, response?["rateLimits"]);
+        AddRateLimitSnapshot(snapshots, seenKeys, response?["rate_limits"]);
+        AddRateLimitSnapshot(snapshots, seenKeys, response?["account"]?["rateLimits"]);
+        AddRateLimitSnapshot(snapshots, seenKeys, response?["account"]?["rate_limits"]);
+        AddRateLimitSnapshot(snapshots, seenKeys, response);
 
-        detailParts.Add(usageText);
-
-        if (resetsAtSeconds.HasValue && resetsAtSeconds.Value > 0)
-        {
-            var resetAt = DateTimeOffset.FromUnixTimeSeconds(resetsAtSeconds.Value).ToLocalTime();
-            detailParts.Add(resetAt.ToString("g"));
-        }
-
-        return new CodexRateLimitWindowSummary
-        {
-            Title = title,
-            Detail = string.Join("   ", detailParts)
-        };
+        return snapshots;
     }
 
-    private static string BuildRateLimitWindowDurationLabel(int durationMinutes)
+    private static void AppendRateLimitSnapshotsFromMap(List<JObject> snapshots, HashSet<string> seenKeys, JToken? token)
     {
-        if (durationMinutes == 10080)
+        if (token is not JObject snapshotMap)
         {
-            return IsPortugueseUiCulture() ? "Semanal" : "Weekly";
+            return;
         }
 
-        if (durationMinutes >= 60 && durationMinutes % 60 == 0)
+        foreach (var property in snapshotMap.Properties())
         {
-            return (durationMinutes / 60) + "h";
+            AddRateLimitSnapshot(snapshots, seenKeys, property.Value, property.Name);
+        }
+    }
+
+    private static void AddRateLimitSnapshot(List<JObject> snapshots, HashSet<string> seenKeys, JToken? token, string? fallbackKey = null)
+    {
+        if (token is not JObject snapshot || !LooksLikeRateLimitSnapshot(snapshot))
+        {
+            return;
         }
 
-        return durationMinutes + "m";
+        var identity = ReadString(snapshot, "limitId", "limit_id", "limitName", "limit_name")
+            ?? fallbackKey
+            ?? snapshot.ToString(Formatting.None);
+
+        if (seenKeys.Add(identity))
+        {
+            snapshots.Add(snapshot);
+        }
     }
 
-    private static bool IsPortugueseUiCulture()
+    private static bool LooksLikeRateLimitSnapshot(JObject snapshot)
     {
-        return string.Equals(System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName, "pt", StringComparison.OrdinalIgnoreCase);
+        return snapshot["primary"] is not null
+            || snapshot["primaryWindow"] is not null
+            || snapshot["primary_window"] is not null
+            || snapshot["secondary"] is not null
+            || snapshot["secondaryWindow"] is not null
+            || snapshot["secondary_window"] is not null
+            || snapshot["windows"] is not null
+            || snapshot["credits"] is not null
+            || snapshot["creditBalance"] is not null
+            || snapshot["credit_balance"] is not null
+            || snapshot["planType"] is not null
+            || snapshot["plan_type"] is not null
+            || snapshot["limitId"] is not null
+            || snapshot["limit_id"] is not null
+            || snapshot["limitName"] is not null
+            || snapshot["limit_name"] is not null;
     }
 
-    private static string BuildCreditsLabel(JToken? credits)
+    private static IReadOnlyList<CodexRateLimitWindowSummary> BuildRateLimitEntries(
+        IReadOnlyList<JObject> snapshots,
+        LocalizationService localization)
     {
-        if (credits is null)
+        var entries = new List<CodexRateLimitWindowSummary>();
+
+        foreach (var snapshot in snapshots
+                     .OrderBy(GetRateLimitSortPriority)
+                     .ThenBy(GetRateLimitDisplayName, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var limitDisplayName = GetRateLimitDisplayName(snapshot);
+            var primary = BuildRateLimitWindowEntry(
+                limitDisplayName,
+                ResolveRateLimitWindow(snapshot, "primary", "primaryWindow", "primary_window", "short"),
+                localization);
+            if (primary.HasData)
+            {
+                entries.Add(primary);
+            }
+
+            var secondary = BuildRateLimitWindowEntry(
+                limitDisplayName,
+                ResolveRateLimitWindow(snapshot, "secondary", "secondaryWindow", "secondary_window", "long"),
+                localization);
+            if (secondary.HasData)
+            {
+                entries.Add(secondary);
+            }
+        }
+
+        var planSnapshot = snapshots.FirstOrDefault(snapshot => !string.IsNullOrWhiteSpace(ReadString(snapshot, "planType", "plan_type", "plan", "tier")));
+        if (planSnapshot is not null)
+        {
+            var planEntry = BuildPlanEntry(planSnapshot, localization);
+            if (planEntry.HasData)
+            {
+                entries.Add(planEntry);
+            }
+        }
+
+        var creditsSnapshot = snapshots.FirstOrDefault(snapshot => ResolveCreditsToken(snapshot) is not null);
+        if (creditsSnapshot is not null)
+        {
+            var creditsEntry = BuildCreditsEntry(ResolveCreditsToken(creditsSnapshot), localization);
+            if (creditsEntry.HasData)
+            {
+                entries.Add(creditsEntry);
+            }
+        }
+
+        return entries;
+    }
+
+    private static int GetRateLimitSortPriority(JObject snapshot)
+    {
+        var rawName = ReadString(snapshot, "limitName", "limit_name", "limitId", "limit_id");
+        return string.IsNullOrWhiteSpace(rawName) || string.Equals(rawName, "codex", StringComparison.OrdinalIgnoreCase)
+            ? 0
+            : 1;
+    }
+
+    private static string GetRateLimitDisplayName(JObject snapshot)
+    {
+        var rawName = ReadString(snapshot, "limitName", "limit_name", "limitId", "limit_id");
+        if (string.IsNullOrWhiteSpace(rawName)
+            || string.Equals(rawName, "codex", StringComparison.OrdinalIgnoreCase))
         {
             return string.Empty;
         }
 
-        var available = credits["available"]?.Value<decimal?>()
-            ?? credits["available_credits"]?.Value<decimal?>();
-        var used = credits["used"]?.Value<decimal?>()
-            ?? credits["used_credits"]?.Value<decimal?>();
+        return rawName.Replace('_', ' ').Trim();
+    }
 
-        if (available.HasValue && used.HasValue)
+    private static JToken? ResolveRateLimitWindow(JObject snapshot, params string[] candidateKeys)
+    {
+        foreach (var key in candidateKeys)
         {
-            return used.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
-                + " / "
-                + available.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            if (snapshot[key] is JToken direct)
+            {
+                return direct;
+            }
         }
 
-        return available?.ToString() ?? used?.ToString() ?? string.Empty;
+        if (snapshot["windows"] is JArray windows)
+        {
+            foreach (var key in candidateKeys)
+            {
+                var match = windows
+                    .OfType<JObject>()
+                    .FirstOrDefault(window => MatchesRateLimitWindow(window, key));
+                if (match is not null)
+                {
+                    return match;
+                }
+            }
+
+            if (candidateKeys.Contains("primary", StringComparer.OrdinalIgnoreCase))
+            {
+                return windows.FirstOrDefault();
+            }
+
+            if (candidateKeys.Contains("secondary", StringComparer.OrdinalIgnoreCase))
+            {
+                return windows.Skip(1).FirstOrDefault();
+            }
+        }
+
+        return null;
+    }
+
+    private static bool MatchesRateLimitWindow(JObject window, string key)
+    {
+        var name = ReadString(window, "name", "title", "id", "kind") ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(name)
+            && name.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static CodexRateLimitWindowSummary BuildRateLimitWindowEntry(string limitDisplayName, JToken? window, LocalizationService localization)
+    {
+        if (window is not JObject windowObject)
+        {
+            return new CodexRateLimitWindowSummary();
+        }
+
+        var title = BuildRateLimitWindowTitle(limitDisplayName, windowObject, localization);
+        var usedPercent = ReadPercent(windowObject, "usedPercent", "used_percent", "usagePercent", "usage_percent");
+        var remainingPercent = ReadPercent(windowObject, "remainingPercent", "remaining_percent", "percentRemaining", "percent_remaining");
+        var resetsAt = ReadResetTime(windowObject);
+        var remaining = ReadDecimal(windowObject, "remaining", "remaining_requests", "remainingTokens", "remaining_tokens");
+        var limit = ReadDecimal(windowObject, "limit", "total", "max", "quota");
+        var effectiveRemainingPercent = remainingPercent
+            ?? (usedPercent.HasValue ? Math.Max(0d, 100d - usedPercent.Value) : null);
+        var detailParts = new List<string>();
+
+        if (remaining.HasValue || limit.HasValue)
+        {
+            if (remaining.HasValue && limit.HasValue)
+            {
+                detailParts.Add(
+                    remaining.Value.ToString("0.##", CultureInfo.CurrentUICulture)
+                    + " / "
+                    + limit.Value.ToString("0.##", CultureInfo.CurrentUICulture));
+            }
+            else
+            {
+                var value = remaining ?? limit;
+                detailParts.Add(value?.ToString("0.##", CultureInfo.CurrentUICulture) ?? string.Empty);
+            }
+        }
+
+        if (effectiveRemainingPercent.HasValue)
+        {
+            detailParts.Add(Math.Round(effectiveRemainingPercent.Value).ToString("0", CultureInfo.CurrentUICulture) + "% " + localization.RateLimitRemainingSuffix);
+        }
+
+        if (resetsAt.HasValue)
+        {
+            detailParts.Add(localization.RateLimitResetsPrefix + " " + resetsAt.Value.ToLocalTime().ToString("g", CultureInfo.CurrentUICulture));
+        }
+
+        return new CodexRateLimitWindowSummary
+        {
+            Title = title?.Trim() ?? string.Empty,
+            Detail = string.Join("   ", detailParts.Where(part => !string.IsNullOrWhiteSpace(part)))
+        };
+    }
+
+    private static string BuildRateLimitWindowTitle(string limitDisplayName, JObject window, LocalizationService localization)
+    {
+        var explicitTitle = ReadString(window, "title", "name");
+        var windowLabel = !string.IsNullOrWhiteSpace(explicitTitle) && !IsGenericRateLimitWindowName(explicitTitle)
+            ? explicitTitle.Trim()
+            : BuildRateLimitWindowDurationLabel(ReadDurationMinutes(window), localization);
+
+        if (string.IsNullOrWhiteSpace(limitDisplayName))
+        {
+            return windowLabel;
+        }
+
+        if (string.IsNullOrWhiteSpace(windowLabel))
+        {
+            return limitDisplayName;
+        }
+
+        return limitDisplayName + " " + windowLabel;
+    }
+
+    private static bool IsGenericRateLimitWindowName(string value)
+    {
+        return string.Equals(value, "primary", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "secondary", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "short", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "long", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static CodexRateLimitWindowSummary BuildPlanEntry(JObject snapshot, LocalizationService localization)
+    {
+        var planType = ReadString(snapshot, "planType", "plan_type", "plan", "tier");
+        return string.IsNullOrWhiteSpace(planType)
+            ? new CodexRateLimitWindowSummary()
+            : new CodexRateLimitWindowSummary
+            {
+                Title = localization.PlanLabelShort,
+                Detail = planType
+            };
+    }
+
+    private static CodexRateLimitWindowSummary BuildCreditsEntry(JToken? credits, LocalizationService localization)
+    {
+        if (credits is not JObject creditsObject)
+        {
+            return new CodexRateLimitWindowSummary();
+        }
+
+        var hasCredits = ReadBoolean(creditsObject, "hasCredits", "has_credits");
+        var unlimited = ReadBoolean(creditsObject, "unlimited");
+        var balance = ReadDecimal(creditsObject, "balance", "available", "available_credits");
+
+        if (unlimited == true)
+        {
+            return new CodexRateLimitWindowSummary
+            {
+                Title = localization.CreditsLabel,
+                Detail = localization.RateLimitUnlimitedLabel
+            };
+        }
+
+        if (balance.HasValue)
+        {
+            return new CodexRateLimitWindowSummary
+            {
+                Title = localization.CreditsLabel,
+                Detail = balance.Value.ToString("0.##", CultureInfo.CurrentUICulture)
+            };
+        }
+
+        return hasCredits == true
+            ? new CodexRateLimitWindowSummary
+            {
+                Title = localization.CreditsLabel
+            }
+            : new CodexRateLimitWindowSummary();
+    }
+
+    private static JToken? ResolveCreditsToken(JObject snapshot)
+    {
+        return snapshot["credits"]
+            ?? snapshot["creditBalance"]
+            ?? snapshot["credit_balance"];
+    }
+
+    private static double? ReadPercent(JObject source, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = source[key]?.Value<double?>();
+            if (!value.HasValue)
+            {
+                continue;
+            }
+
+            return value.Value <= 1d ? value.Value * 100d : value.Value;
+        }
+
+        return null;
+    }
+
+    private static decimal? ReadDecimal(JToken? source, params string[] keys)
+    {
+        if (source is not JObject sourceObject)
+        {
+            return null;
+        }
+
+        foreach (var key in keys)
+        {
+            var token = sourceObject[key];
+            if (token is null || token.Type == JTokenType.Null || token.Type == JTokenType.Undefined)
+            {
+                continue;
+            }
+
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+            {
+                return token.Value<decimal?>();
+            }
+
+            var text = token.Value<string>();
+            if (decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var invariantValue)
+                || decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentUICulture, out invariantValue))
+            {
+                return invariantValue;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool? ReadBoolean(JToken? source, params string[] keys)
+    {
+        if (source is not JObject sourceObject)
+        {
+            return null;
+        }
+
+        foreach (var key in keys)
+        {
+            var token = sourceObject[key];
+            if (token is null || token.Type == JTokenType.Null || token.Type == JTokenType.Undefined)
+            {
+                continue;
+            }
+
+            if (token.Type == JTokenType.Boolean)
+            {
+                return token.Value<bool>();
+            }
+
+            var text = token.Value<string>();
+            if (bool.TryParse(text, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ReadString(JToken? source, params string[] keys)
+    {
+        if (source is not JObject sourceObject)
+        {
+            return null;
+        }
+
+        foreach (var key in keys)
+        {
+            var value = sourceObject[key]?.Value<string>();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static DateTimeOffset? ReadResetTime(JObject source)
+    {
+        var unixSeconds = source["resetsAt"]?.Value<long?>()
+            ?? source["resets_at"]?.Value<long?>()
+            ?? source["resetAt"]?.Value<long?>()
+            ?? source["reset_at"]?.Value<long?>();
+        if (unixSeconds.HasValue && unixSeconds.Value > 0)
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds.Value);
+        }
+
+        var resetText = source["resetsAt"]?.Value<string>()
+            ?? source["resets_at"]?.Value<string>()
+            ?? source["resetAt"]?.Value<string>()
+            ?? source["reset_at"]?.Value<string>();
+        if (DateTimeOffset.TryParse(resetText, out var resetAt))
+        {
+            return resetAt;
+        }
+
+        return null;
+    }
+
+    private static int? ReadDurationMinutes(JObject source)
+    {
+        return source["windowDurationMins"]?.Value<int?>()
+            ?? source["window_duration_mins"]?.Value<int?>()
+            ?? source["durationMinutes"]?.Value<int?>()
+            ?? source["duration_minutes"]?.Value<int?>()
+            ?? source["windowMinutes"]?.Value<int?>()
+            ?? source["window_minutes"]?.Value<int?>();
+    }
+
+    private static string BuildRateLimitWindowDurationLabel(int? durationMinutes, LocalizationService localization)
+    {
+        if (!durationMinutes.HasValue || durationMinutes.Value <= 0)
+        {
+            return string.Empty;
+        }
+
+        if (durationMinutes.Value == 10080)
+        {
+            return localization.RateLimitWeeklyLabel;
+        }
+
+        if (durationMinutes.Value >= 60 && durationMinutes.Value % 60 == 0)
+        {
+            return (durationMinutes.Value / 60) + "h";
+        }
+
+        return durationMinutes.Value + "m";
     }
 
     private IEnumerable<object> ExtractMentionInputs(string prompt, string workingDirectory)
@@ -2276,6 +2776,8 @@ public sealed class CodexProcessService : IDisposable
                 return string.IsNullOrWhiteSpace(agentText) ? null : new ChatMessage(false, agentText);
 
             case "plan":
+                return BuildThreadEventMessage(item);
+
             case "reasoning":
             case "commandExecution":
             case "fileChange":
@@ -2347,128 +2849,215 @@ public sealed class CodexProcessService : IDisposable
 
     private static ChatMessage? BuildThreadEventMessage(JToken? item)
     {
-        var localization = new LocalizationService();
         var itemType = item?["type"]?.Value<string>();
         switch (itemType)
         {
             case "plan":
-                var planText = NormalizeDetail(item?["text"]?.Value<string>());
-                return CreateEventMessage(localization.EventPlanTitle, BuildSummary(planText, localization.EventPlanUpdated), planText);
-
-            case "reasoning":
-                var reasoningText = NormalizeDetail(JoinTextArray(item?["summary"]));
-                return CreateEventMessage(localization.EventReasoningTitle, BuildSummary(reasoningText, localization.EventReasoningUpdated), reasoningText);
-
-            case "commandExecution":
-                var command = item?["command"]?.Value<string>();
-                var status = item?["status"]?.Value<string>();
-                var exitCode = item?["exitCode"]?.Value<int?>();
-                var durationMs = item?["durationMs"]?.Value<long?>();
-                var aggregatedOutput = NormalizeDetail(item?["aggregatedOutput"]?.Value<string>());
-                var cwd = item?["cwd"]?.Value<string>();
-                return CreateEventMessage(
-                    localization.EventCommandTitle,
-                    BuildCommandSummary(command, status, exitCode, durationMs, localization),
-                    BuildDetailSections(
-                        string.IsNullOrWhiteSpace(cwd) ? null : localization.EventWorkingDirectoryLabel + Environment.NewLine + cwd.Trim(),
-                        string.IsNullOrWhiteSpace(aggregatedOutput) ? null : localization.EventOutputLabel + Environment.NewLine + aggregatedOutput));
-
-            case "fileChange":
-                var changes = item?["changes"] as JArray;
-                return CreateEventMessage(localization.EventFileChangesTitle, BuildFileChangeSummary(changes, localization), BuildFileChangeDetail(changes, localization));
-
-            case "mcpToolCall":
-                var server = item?["server"]?.Value<string>();
-                var tool = item?["tool"]?.Value<string>();
-                var toolLabel = string.IsNullOrWhiteSpace(server) ? tool : server + "." + tool;
-                var toolStatus = item?["status"]?.Value<string>();
-                var toolDurationMs = item?["durationMs"]?.Value<long?>();
-                var errorMessage = GetNestedString(item, "error", "message");
-                bool? mcpSuccess = null;
-                if (!string.IsNullOrWhiteSpace(errorMessage))
-                {
-                    mcpSuccess = false;
-                }
-                else if (string.Equals(toolStatus, "completed", StringComparison.OrdinalIgnoreCase))
-                {
-                    mcpSuccess = true;
-                }
-                else if (string.Equals(toolStatus, "failed", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(toolStatus, "canceled", StringComparison.OrdinalIgnoreCase))
-                {
-                    mcpSuccess = false;
-                }
-
-                return CreateEventMessage(
-                    localization.EventMcpToolTitle,
-                    BuildToolSummary(toolLabel, toolStatus, toolDurationMs, localization, mcpSuccess),
-                    BuildDetailSections(
-                        BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"]),
-                        string.IsNullOrWhiteSpace(errorMessage) ? null : localization.EventErrorLabel + Environment.NewLine + errorMessage.Trim(),
-                        BuildNamedTextBlock(localization.EventResultLabel, ExtractContentText(GetNestedToken(item, "result", "content")) ?? SerializeStructuredValue(item?["result"]))));
-
-            case "dynamicToolCall":
-                var dynamicTool = item?["tool"]?.Value<string>();
-                var success = item?["success"]?.Value<bool?>();
-                return CreateEventMessage(
-                    localization.EventToolTitle,
-                    BuildToolSummary(dynamicTool, item?["status"]?.Value<string>(), item?["durationMs"]?.Value<long?>(), localization, success),
-                    BuildDetailSections(
-                        BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"]),
-                        BuildNamedTextBlock(localization.EventOutputLabel, ExtractContentText(item?["contentItems"]) ?? SerializeStructuredValue(item?["contentItems"]))));
-
-            case "collabAgentToolCall":
-                var collabTool = item?["tool"]?.Value<string>();
-                var receiverIds = item?["receiverThreadIds"] is JArray receivers
-                    ? string.Join(", ", receivers.Values<string>().Where(value => !string.IsNullOrWhiteSpace(value)))
-                    : string.Empty;
-                return CreateEventMessage(
-                    localization.EventAgentToolTitle,
-                    BuildSummary(string.IsNullOrWhiteSpace(receiverIds) ? collabTool : collabTool + " -> " + receiverIds, localization.EventAgentToolUsed),
-                    BuildDetailSections(
-                        BuildNamedTextBlock(localization.EventPromptLabel, NormalizeDetail(item?["prompt"]?.Value<string>())),
-                        BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"])));
-
-            case "webSearch":
-                var query = item?["query"]?.Value<string>();
-                return CreateEventMessage(
-                    localization.EventWebSearchTitle,
-                    BuildSummary(query, localization.EventWebSearchTitle),
-                    BuildNamedTextBlock(localization.EventResultLabel, ExtractContentText(GetNestedToken(item, "result", "content")) ?? SerializeStructuredValue(item?["result"])));
-
-            case "imageView":
-                return CreateEventMessage(localization.EventImageViewTitle, BuildSummary(item?["path"]?.Value<string>(), localization.EventImageViewed));
-
-            case "imageGeneration":
-                return CreateEventMessage(
-                    localization.EventImageGenerationTitle,
-                    BuildSummary(item?["status"]?.Value<string>(), localization.EventImageGenerated),
-                    BuildNamedTextBlock(localization.EventPromptLabel, NormalizeDetail(item?["prompt"]?.Value<string>())));
-
-            case "enteredReviewMode":
-                return CreateEventMessage(localization.EventReviewModeTitle, BuildSummary(item?["review"]?.Value<string>(), localization.EventEnteredReviewMode));
-
-            case "exitedReviewMode":
-                return CreateEventMessage(localization.EventReviewModeTitle, BuildSummary(item?["review"]?.Value<string>(), localization.EventExitedReviewMode));
-
-            case "contextCompaction":
-                return CreateEventMessage(localization.EventContextTitle, localization.EventConversationContextCompacted);
+                var planText = NormalizeDetail(item?["text"]?.Value<string>(), maxLength: null);
+                return CreatePlanEventMessage(planText);
 
             default:
-                return null;
+                var localization = new LocalizationService();
+                switch (itemType)
+                {
+                    case "reasoning":
+                        var reasoningText = NormalizeDetail(JoinTextArray(item?["summary"]));
+                        return CreateEventMessage(localization.EventReasoningTitle, BuildSummary(reasoningText, localization.EventReasoningUpdated), reasoningText);
+
+                    case "commandExecution":
+                        var command = item?["command"]?.Value<string>();
+                        var status = item?["status"]?.Value<string>();
+                        var exitCode = item?["exitCode"]?.Value<int?>();
+                        var durationMs = item?["durationMs"]?.Value<long?>();
+                        var aggregatedOutput = NormalizeDetail(item?["aggregatedOutput"]?.Value<string>());
+                        var cwd = item?["cwd"]?.Value<string>();
+                        return CreateEventMessage(
+                            localization.EventCommandTitle,
+                            BuildCommandSummary(command, status, exitCode, durationMs, localization),
+                            BuildDetailSections(
+                                string.IsNullOrWhiteSpace(cwd) ? null : localization.EventWorkingDirectoryLabel + Environment.NewLine + cwd.Trim(),
+                                string.IsNullOrWhiteSpace(aggregatedOutput) ? null : localization.EventOutputLabel + Environment.NewLine + aggregatedOutput));
+
+                    case "fileChange":
+                        var changes = item?["changes"] as JArray;
+                        return CreateEventMessage(localization.EventFileChangesTitle, BuildFileChangeSummary(changes, localization), BuildFileChangeDetail(changes, localization));
+
+                    case "mcpToolCall":
+                        var server = item?["server"]?.Value<string>();
+                        var tool = item?["tool"]?.Value<string>();
+                        var toolLabel = string.IsNullOrWhiteSpace(server) ? tool : server + "." + tool;
+                        var toolStatus = item?["status"]?.Value<string>();
+                        var toolDurationMs = item?["durationMs"]?.Value<long?>();
+                        var errorMessage = GetNestedString(item, "error", "message");
+                        bool? mcpSuccess = null;
+                        if (!string.IsNullOrWhiteSpace(errorMessage))
+                        {
+                            mcpSuccess = false;
+                        }
+                        else if (string.Equals(toolStatus, "completed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            mcpSuccess = true;
+                        }
+                        else if (string.Equals(toolStatus, "failed", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(toolStatus, "canceled", StringComparison.OrdinalIgnoreCase))
+                        {
+                            mcpSuccess = false;
+                        }
+
+                        return CreateEventMessage(
+                            localization.EventMcpToolTitle,
+                            BuildToolSummary(toolLabel, toolStatus, toolDurationMs, localization, mcpSuccess),
+                            BuildDetailSections(
+                                BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"]),
+                                string.IsNullOrWhiteSpace(errorMessage) ? null : localization.EventErrorLabel + Environment.NewLine + errorMessage.Trim(),
+                                BuildNamedTextBlock(localization.EventResultLabel, ExtractContentText(GetNestedToken(item, "result", "content")) ?? SerializeStructuredValue(item?["result"]))));
+
+                    case "dynamicToolCall":
+                        var dynamicTool = item?["tool"]?.Value<string>();
+                        var success = item?["success"]?.Value<bool?>();
+                        return CreateEventMessage(
+                            localization.EventToolTitle,
+                            BuildToolSummary(dynamicTool, item?["status"]?.Value<string>(), item?["durationMs"]?.Value<long?>(), localization, success),
+                            BuildDetailSections(
+                                BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"]),
+                                BuildNamedTextBlock(localization.EventOutputLabel, ExtractContentText(item?["contentItems"]) ?? SerializeStructuredValue(item?["contentItems"]))));
+
+                    case "collabAgentToolCall":
+                        var collabTool = item?["tool"]?.Value<string>();
+                        var receiverIds = item?["receiverThreadIds"] is JArray receivers
+                            ? string.Join(", ", receivers.Values<string>().Where(value => !string.IsNullOrWhiteSpace(value)))
+                            : string.Empty;
+                        return CreateEventMessage(
+                            localization.EventAgentToolTitle,
+                            BuildSummary(string.IsNullOrWhiteSpace(receiverIds) ? collabTool : collabTool + " -> " + receiverIds, localization.EventAgentToolUsed),
+                            BuildDetailSections(
+                                BuildNamedTextBlock(localization.EventPromptLabel, NormalizeDetail(item?["prompt"]?.Value<string>())),
+                                BuildNamedJsonBlock(localization.EventArgumentsLabel, item?["arguments"])));
+
+                    case "webSearch":
+                        var query = item?["query"]?.Value<string>();
+                        return CreateEventMessage(
+                            localization.EventWebSearchTitle,
+                            BuildSummary(query, localization.EventWebSearchTitle),
+                            BuildNamedTextBlock(localization.EventResultLabel, ExtractContentText(GetNestedToken(item, "result", "content")) ?? SerializeStructuredValue(item?["result"])));
+
+                    case "imageView":
+                        return CreateEventMessage(localization.EventImageViewTitle, BuildSummary(item?["path"]?.Value<string>(), localization.EventImageViewed));
+
+                    case "imageGeneration":
+                        return CreateEventMessage(
+                            localization.EventImageGenerationTitle,
+                            BuildSummary(item?["status"]?.Value<string>(), localization.EventImageGenerated),
+                            BuildNamedTextBlock(localization.EventPromptLabel, NormalizeDetail(item?["prompt"]?.Value<string>())));
+
+                    case "enteredReviewMode":
+                        return CreateEventMessage(localization.EventReviewModeTitle, BuildSummary(item?["review"]?.Value<string>(), localization.EventEnteredReviewMode));
+
+                    case "exitedReviewMode":
+                        return CreateEventMessage(localization.EventReviewModeTitle, BuildSummary(item?["review"]?.Value<string>(), localization.EventExitedReviewMode));
+
+                    case "contextCompaction":
+                        return CreateEventMessage(localization.EventContextTitle, localization.EventConversationContextCompacted);
+
+                    default:
+                        return null;
+                }
         }
     }
 
-    private static ChatMessage? CreateEventMessage(string title, string? summary, string? detail = null)
+    private static ChatMessage CreatePlanEventMessage(string? planText)
+    {
+        var localization = new LocalizationService();
+        return CreateEventMessage(
+            localization.EventPlanTitle,
+            BuildSummary(planText, localization.EventPlanUpdated),
+            planText,
+            detailMaxLength: null,
+            supportsMarkdownDetail: true);
+    }
+
+    private static ChatMessage? CreateEventMessage(
+        string title,
+        string? summary,
+        string? detail = null,
+        int? detailMaxLength = 2200,
+        bool supportsMarkdownDetail = false)
     {
         var normalizedSummary = BuildSummary(summary, title);
-        var normalizedDetail = NormalizeDetail(detail);
+        var normalizedDetail = NormalizeDetail(detail, detailMaxLength);
         if (string.Equals(normalizedSummary, CompactSingleLine(normalizedDetail), StringComparison.Ordinal))
         {
             normalizedDetail = null;
         }
 
-        return new ChatMessage(false, normalizedSummary, isEvent: true, title: title, detail: normalizedDetail);
+        return new ChatMessage(
+            false,
+            normalizedSummary,
+            isEvent: true,
+            title: title,
+            detail: normalizedDetail,
+            supportsMarkdownText: false,
+            supportsMarkdownDetail: supportsMarkdownDetail);
+    }
+
+    private static string? BuildStructuredPlanMarkdown(string? explanation, JArray? plan, LocalizationService localization)
+    {
+        var sections = new List<string>();
+        var normalizedExplanation = NormalizeDetail(explanation, maxLength: null);
+        if (!string.IsNullOrWhiteSpace(normalizedExplanation))
+        {
+            sections.Add(normalizedExplanation);
+        }
+
+        if (plan is not null)
+        {
+            var items = new List<string>();
+            foreach (var step in plan)
+            {
+                var stepText = NormalizeDetail(step?["step"]?.Value<string>(), maxLength: null);
+                if (string.IsNullOrWhiteSpace(stepText))
+                {
+                    continue;
+                }
+
+                items.Add(FormatPlanStep(stepText, step?["status"]?.Value<string>(), localization));
+            }
+
+            if (items.Count > 0)
+            {
+                sections.Add(string.Join(Environment.NewLine, items));
+            }
+        }
+
+        return sections.Count == 0
+            ? null
+            : string.Join(Environment.NewLine + Environment.NewLine, sections);
+    }
+
+    private static string FormatPlanStep(string stepText, string? status, LocalizationService localization)
+    {
+        return NormalizePlanStatus(status) switch
+        {
+            "completed" => "- [x] " + stepText,
+            "inprogress" => "- [ ] **" + localization.EventInProgressStatus + ":** " + stepText,
+            "pending" => "- [ ] " + stepText,
+            _ => "- " + stepText
+        };
+    }
+
+    private static string NormalizePlanStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return string.Empty;
+        }
+
+        return status
+            .Trim()
+            .Replace("_", string.Empty)
+            .Replace("-", string.Empty)
+            .Replace(" ", string.Empty)
+            .ToLowerInvariant();
     }
 
     private static string BuildCommandSummary(string? command, string? status, int? exitCode, long? durationMs, LocalizationService localization)
@@ -2605,7 +3194,7 @@ public sealed class CodexProcessService : IDisposable
         return compact.Trim();
     }
 
-    private static string? NormalizeDetail(string? value)
+    private static string? NormalizeDetail(string? value, int? maxLength = 2200)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -2613,7 +3202,12 @@ public sealed class CodexProcessService : IDisposable
         }
 
         var normalized = value.Replace("\r\n", "\n").Replace('\r', '\n').Trim();
-        return string.IsNullOrWhiteSpace(normalized) ? null : Truncate(normalized, 2200);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        return maxLength.HasValue ? Truncate(normalized, maxLength.Value) : normalized;
     }
 
     private static string? BuildNamedTextBlock(string label, string? value)
@@ -2991,6 +3585,12 @@ public sealed class CodexProcessService : IDisposable
     {
         var args = new List<string> { "app-server", "--listen", "stdio://" };
 
+        if (!HasProfileArgument(settings.AdditionalArguments) && !string.IsNullOrWhiteSpace(settings.Profile))
+        {
+            args.Add("--profile");
+            args.Add(settings.Profile.Trim());
+        }
+
         foreach (var line in BuildManagedMcpOverrideLines(settings))
         {
             args.Add("-c");
@@ -3025,6 +3625,7 @@ public sealed class CodexProcessService : IDisposable
             string.IsNullOrWhiteSpace(resolvedExecutablePath)
                 ? CodexExecutableResolver.NormalizeConfiguredExecutablePath(settings.CodexExecutablePath)
                 : resolvedExecutablePath,
+            settings.Profile ?? string.Empty,
             string.Join("\n", BuildManagedMcpOverrideLines(settings)),
             settings.RawTomlOverrides ?? string.Empty,
             settings.AdditionalArguments ?? string.Empty,
@@ -3365,6 +3966,21 @@ public sealed class CodexProcessService : IDisposable
         }
     }
 
+    private static bool HasProfileArgument(string? commandLine)
+    {
+        foreach (var token in SplitArguments(commandLine ?? string.Empty))
+        {
+            if (string.Equals(token, "--profile", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(token, "-p", StringComparison.OrdinalIgnoreCase)
+                || token.StartsWith("--profile=", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private sealed class ActiveTurnState
     {
         public ActiveTurnState(Action<string> onOutput, Action<string> onError, Action<ChatMessage>? onEventMessage, Action<long, long?>? onTokenUsage)
@@ -3382,9 +3998,52 @@ public sealed class CodexProcessService : IDisposable
         public Action<ChatMessage>? OnEventMessage { get; }
         public Action<long, long?>? OnTokenUsage { get; }
         public HashSet<string> StreamedItemIds { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, StringBuilder> PlanTextByItemId { get; } = new(StringComparer.Ordinal);
         public string? TurnId { get; set; }
         public bool HasAssistantOutput { get; set; }
         public bool InterruptRequested { get; set; }
+
+        public string AppendPlanDelta(string? itemId, string delta)
+        {
+            var key = string.IsNullOrWhiteSpace(itemId) ? "__plan__" : itemId!;
+            if (!PlanTextByItemId.TryGetValue(key, out var builder))
+            {
+                builder = new StringBuilder();
+                PlanTextByItemId[key] = builder;
+            }
+
+            builder.Append(delta);
+            return builder.ToString();
+        }
+
+        public void SetPlanText(string? itemId, string planText)
+        {
+            var key = string.IsNullOrWhiteSpace(itemId) ? "__plan__" : itemId!;
+            PlanTextByItemId[key] = new StringBuilder(planText ?? string.Empty);
+        }
+
+        public string? GetPlanText(string? itemId)
+        {
+            var key = string.IsNullOrWhiteSpace(itemId) ? "__plan__" : itemId!;
+            if (PlanTextByItemId.TryGetValue(key, out var builder) && builder.Length > 0)
+            {
+                return builder.ToString();
+            }
+
+            if (!string.Equals(key, "__plan__", StringComparison.Ordinal)
+                && PlanTextByItemId.TryGetValue("__plan__", out var sharedBuilder)
+                && sharedBuilder.Length > 0)
+            {
+                return sharedBuilder.ToString();
+            }
+
+            if (PlanTextByItemId.Count == 1)
+            {
+                return PlanTextByItemId.Values.First().ToString();
+            }
+
+            return null;
+        }
 
         public void TrySetResult(int result)
         {
