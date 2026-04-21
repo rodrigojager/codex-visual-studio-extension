@@ -10,5 +10,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
-[assembly: AssemblyVersion("1.1.17.0")]
-[assembly: AssemblyFileVersion("1.1.17.0")]
+[assembly: AssemblyVersion("1.1.18.0")]
+[assembly: AssemblyFileVersion("1.1.18.0")]

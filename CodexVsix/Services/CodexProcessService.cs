@@ -1594,13 +1594,9 @@ public sealed class CodexProcessService : IDisposable
     {
         var attempts = new List<(string Label, bool IncludeExecutionOverrides, bool IncludeCollaborationMode)>
         {
-            ("full", true, true)
+            ("full", true, true),
+            ("no-collaboration-mode", true, false)
         };
-
-        if (settings.PlanModeEnabled)
-        {
-            attempts.Add(("no-plan", true, false));
-        }
 
         attempts.Add(("minimal", false, false));
 
@@ -1655,14 +1651,15 @@ public sealed class CodexProcessService : IDisposable
 
     private static object? BuildCollaborationMode(CodexExtensionSettings settings)
     {
-        if (!settings.PlanModeEnabled || string.IsNullOrWhiteSpace(settings.DefaultModel))
+        if (string.IsNullOrWhiteSpace(settings.DefaultModel))
         {
             return null;
         }
 
         return new
         {
-            mode = "plan",
+            // Default must be sent explicitly, otherwise an existing thread can stay in Plan mode.
+            mode = settings.PlanModeEnabled ? "plan" : "default",
             settings = new
             {
                 model = settings.DefaultModel,
