@@ -2028,10 +2028,17 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri)
             && string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
         {
-            normalized = uri.LocalPath;
+            normalized = uri.LocalPath + uri.Fragment;
+        }
+        else if (Uri.TryCreate(normalized, UriKind.Absolute, out uri)
+            && uri.Scheme.Length != 1)
+        {
+            return false;
         }
 
+        normalized = DecodeReferencedFileText(normalized);
         var pathText = StripReferencedFilePosition(normalized, out var line, out var column);
+        pathText = NormalizeReferencedPathText(DecodeReferencedFileText(pathText));
         foreach (var candidate in GetReferencedFileCandidates(pathText))
         {
             try
@@ -2058,23 +2065,43 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             yield break;
         }
 
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (Path.IsPathRooted(pathText))
         {
-            yield return pathText;
+            if (seen.Add(pathText))
+            {
+                yield return pathText;
+            }
             yield break;
         }
 
         var workingDirectory = (Settings.WorkingDirectory ?? string.Empty).Trim();
         if (!string.IsNullOrWhiteSpace(workingDirectory))
         {
-            yield return Path.Combine(workingDirectory, pathText);
+            var candidate = Path.Combine(workingDirectory, pathText);
+            if (seen.Add(candidate))
+            {
+                yield return candidate;
+            }
         }
 
         var solutionDirectory = _solutionContextService.TryGetSolutionDirectory();
         if (!string.IsNullOrWhiteSpace(solutionDirectory)
             && !string.Equals(solutionDirectory, workingDirectory, StringComparison.OrdinalIgnoreCase))
         {
-            yield return Path.Combine(solutionDirectory, pathText);
+            var candidate = Path.Combine(solutionDirectory, pathText);
+            if (seen.Add(candidate))
+            {
+                yield return candidate;
+            }
+        }
+
+        foreach (var candidate in GetSolutionFileReferenceCandidates(pathText, solutionDirectory))
+        {
+            if (seen.Add(candidate))
+            {
+                yield return candidate;
+            }
         }
     }
 
@@ -2090,6 +2117,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         line = null;
         column = null;
+        reference = StripReferencedFileFragmentPosition(reference, out line, out column);
 
         var match = Regex.Match(reference, @"^(?<path>.+?)(?::(?<line>\d+)(?::(?<column>\d+))?)$");
         if (!match.Success)
@@ -2104,6 +2132,132 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             ? parsedColumn
             : null;
         return match.Groups["path"].Value;
+    }
+
+    private IEnumerable<string> GetSolutionFileReferenceCandidates(string pathText, string? solutionDirectory)
+    {
+        var normalizedReference = NormalizeReferenceForComparison(pathText);
+        if (string.IsNullOrWhiteSpace(normalizedReference))
+        {
+            yield break;
+        }
+
+        foreach (var candidate in _solutionContextService.GetSolutionFilePaths()
+            .Select(path => new
+            {
+                Path = path,
+                Score = ScoreSolutionFileReference(path, normalizedReference, solutionDirectory)
+            })
+            .Where(candidate => candidate.Score >= 0)
+            .OrderBy(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase))
+        {
+            yield return candidate.Path;
+        }
+    }
+
+    private static int ScoreSolutionFileReference(string filePath, string normalizedReference, string? solutionDirectory)
+    {
+        var normalizedFullPath = NormalizeReferenceForComparison(filePath);
+        if (string.Equals(normalizedFullPath, normalizedReference, StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        if (!string.IsNullOrWhiteSpace(solutionDirectory))
+        {
+            var solutionRoot = solutionDirectory!;
+            if (filePath.StartsWith(solutionRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                var relativePath = filePath.Substring(solutionRoot.Length)
+                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var normalizedRelativePath = NormalizeReferenceForComparison(relativePath);
+                if (string.Equals(normalizedRelativePath, normalizedReference, StringComparison.OrdinalIgnoreCase))
+                {
+                    return 1;
+                }
+            }
+        }
+
+        var includesDirectory = normalizedReference.IndexOf('/') >= 0;
+        if (includesDirectory
+            && normalizedFullPath.EndsWith("/" + normalizedReference, StringComparison.OrdinalIgnoreCase))
+        {
+            return 20 + Math.Max(0, normalizedFullPath.Length - normalizedReference.Length);
+        }
+
+        if (!includesDirectory
+            && string.Equals(Path.GetFileName(filePath), normalizedReference, StringComparison.OrdinalIgnoreCase))
+        {
+            return 100 + filePath.Length;
+        }
+
+        return -1;
+    }
+
+    private static string StripReferencedFileFragmentPosition(string reference, out int? line, out int? column)
+    {
+        line = null;
+        column = null;
+
+        var hashIndex = reference.IndexOf('#');
+        if (hashIndex < 0)
+        {
+            return reference;
+        }
+
+        var fragment = reference.Substring(hashIndex + 1);
+        var path = reference.Substring(0, hashIndex);
+        var match = Regex.Match(fragment, @"^L?(?<line>\d+)(?:(?:C|:)(?<column>\d+))?", RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+            line = int.TryParse(match.Groups["line"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedLine)
+                ? parsedLine
+                : null;
+            column = int.TryParse(match.Groups["column"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedColumn)
+                ? parsedColumn
+                : null;
+        }
+
+        return path;
+    }
+
+    private static string DecodeReferencedFileText(string reference)
+    {
+        try
+        {
+            return Uri.UnescapeDataString(reference);
+        }
+        catch
+        {
+            return reference;
+        }
+    }
+
+    private static string NormalizeReferencedPathText(string pathText)
+    {
+        var normalized = (pathText ?? string.Empty).Trim();
+        while (normalized.StartsWith("./", StringComparison.Ordinal)
+            || normalized.StartsWith(".\\", StringComparison.Ordinal))
+        {
+            normalized = normalized.Substring(2);
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeReferenceForComparison(string pathText)
+    {
+        var normalized = NormalizeReferencedPathText(pathText)
+            .Replace('\\', '/')
+            .Trim();
+
+        while (normalized.StartsWith("/", StringComparison.Ordinal))
+        {
+            normalized = normalized.Substring(1);
+        }
+
+        return normalized;
     }
 
     private readonly struct ReferencedFile

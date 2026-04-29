@@ -317,9 +317,15 @@ internal static class MarkdownRenderer
 
     private static Inline CreateInlineCode(string code)
     {
-        if (TryResolveWorkspaceFileReference(code, out var target))
+        var displayText = TrimFileReferenceDisplay(code);
+        if (CanExecuteLinkCommand(CurrentOptions.LinkCommand, displayText))
         {
-            return CreateFileReferenceHyperlink(code, target, renderAsInlineCode: true);
+            return CreateFileReferenceHyperlink(displayText, displayText, renderAsInlineCode: true);
+        }
+
+        if (TryResolveWorkspaceFileReference(displayText, out var target))
+        {
+            return CreateFileReferenceHyperlink(displayText, target, renderAsInlineCode: true);
         }
 
         var border = new Border
@@ -346,6 +352,13 @@ internal static class MarkdownRenderer
 
     private static Inline CreateHyperlink(string label, string url)
     {
+        var command = CurrentOptions.LinkCommand;
+        var target = TrimFileReferenceDisplay(url);
+        if (CanExecuteLinkCommand(command, target))
+        {
+            return CreateCommandHyperlink(label, target, command);
+        }
+
         var hyperlink = new Hyperlink(new Run(label))
         {
             Foreground = CreateBrush(CurrentTheme.LinkColor),
@@ -358,7 +371,7 @@ internal static class MarkdownRenderer
 
             try
             {
-                if (TryExecuteLinkCommand(url))
+                if (TryExecuteLinkCommand(command, target))
                 {
                     return;
                 }
@@ -379,7 +392,13 @@ internal static class MarkdownRenderer
 
     private static Inline CreateFileReferenceHyperlink(string reference)
     {
+        var command = CurrentOptions.LinkCommand;
         var displayText = TrimFileReferenceDisplay(reference);
+        if (CanExecuteLinkCommand(command, displayText))
+        {
+            return CreateFileReferenceHyperlink(displayText, displayText, renderAsInlineCode: false);
+        }
+
         if (!TryResolveWorkspaceFileReference(displayText, out var target))
         {
             return new Run(reference);
@@ -388,8 +407,27 @@ internal static class MarkdownRenderer
         return CreateFileReferenceHyperlink(displayText, target, renderAsInlineCode: false);
     }
 
+    private static Inline CreateCommandHyperlink(string label, string target, ICommand? command)
+    {
+        var hyperlink = new Hyperlink(new Run(label))
+        {
+            Foreground = CreateBrush(CurrentTheme.LinkColor),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = target
+        };
+
+        hyperlink.Click += (_, e) =>
+        {
+            e.Handled = true;
+            TryExecuteLinkCommand(command, target);
+        };
+
+        return hyperlink;
+    }
+
     private static Inline CreateFileReferenceHyperlink(string label, string target, bool renderAsInlineCode)
     {
+        var command = CurrentOptions.LinkCommand;
         var hyperlink = new Hyperlink();
 
         if (renderAsInlineCode)
@@ -410,7 +448,7 @@ internal static class MarkdownRenderer
         hyperlink.Click += (_, e) =>
         {
             e.Handled = true;
-            TryExecuteLinkCommand(target);
+            TryExecuteLinkCommand(command, target);
         };
 
         return hyperlink;
@@ -437,7 +475,11 @@ internal static class MarkdownRenderer
 
     private static bool TryExecuteLinkCommand(string target)
     {
-        var command = CurrentOptions.LinkCommand;
+        return TryExecuteLinkCommand(CurrentOptions.LinkCommand, target);
+    }
+
+    private static bool TryExecuteLinkCommand(ICommand? command, string target)
+    {
         if (command is null || string.IsNullOrWhiteSpace(target) || IsExternalUri(target))
         {
             return false;
@@ -450,6 +492,28 @@ internal static class MarkdownRenderer
 
         command.Execute(target);
         return true;
+    }
+
+    private static bool CanExecuteLinkCommand(string target)
+    {
+        return CanExecuteLinkCommand(CurrentOptions.LinkCommand, target);
+    }
+
+    private static bool CanExecuteLinkCommand(ICommand? command, string target)
+    {
+        if (command is null || string.IsNullOrWhiteSpace(target) || IsExternalUri(target))
+        {
+            return false;
+        }
+
+        try
+        {
+            return command.CanExecute(target);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool TryResolveWorkspaceFileReference(string reference, out string target)

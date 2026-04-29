@@ -101,6 +101,35 @@ public sealed class SolutionContextService
         return files;
     }
 
+    public IReadOnlyList<string> GetSolutionFilePaths()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
+        if (dte?.Solution?.Projects is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var files = new List<string>();
+        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            foreach (Project project in dte.Solution.Projects)
+            {
+                CollectProjectFiles(project, files, visitedProjects);
+            }
+        }
+        catch
+        {
+        }
+
+        return files
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public string GetCodexConfigPath()
     {
         return Path.Combine(GetCodexHomeDirectory(), "config.toml");
@@ -174,6 +203,13 @@ public sealed class SolutionContextService
 
     private static bool TryOpenDocumentInVisualStudio(string path)
     {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        if (TryOpenDocumentWithDte(path))
+        {
+            return true;
+        }
+
         try
         {
             VsShellUtilities.OpenDocument(Microsoft.VisualStudio.Shell.ServiceProvider.GlobalProvider, path);
@@ -183,24 +219,35 @@ public sealed class SolutionContextService
         {
         }
 
+        return false;
+    }
+
+    private static bool TryOpenDocumentWithDte(string path)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
         try
         {
             var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
-            if (dte?.ItemOperations is not null)
+            if (dte?.ItemOperations is null)
             {
-                dte.ItemOperations.OpenFile(path, EnvDTE.Constants.vsViewKindTextView);
-                return true;
+                return false;
             }
+
+            var window = dte.ItemOperations.OpenFile(path, EnvDTE.Constants.vsViewKindTextView);
+            window?.Activate();
+            return true;
         }
         catch
         {
+            return false;
         }
-
-        return false;
     }
 
     private static void NavigateActiveDocument(int line, int? column)
     {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
         try
         {
             var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
@@ -469,6 +516,128 @@ public sealed class SolutionContextService
         }
 
         return null;
+    }
+
+    private static void CollectProjectFiles(Project? project, ICollection<string> files, ISet<string> visitedProjects)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (project is null)
+        {
+            return;
+        }
+
+        var projectKey = TryGetProjectKey(project);
+        if (!string.IsNullOrWhiteSpace(projectKey))
+        {
+            var key = projectKey!;
+            if (!visitedProjects.Add(key))
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            TryAddFile(files, project.FullName);
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (project.ProjectItems is null)
+            {
+                return;
+            }
+
+            foreach (ProjectItem item in project.ProjectItems)
+            {
+                CollectProjectItemFiles(item, files, visitedProjects);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static void CollectProjectItemFiles(ProjectItem item, ICollection<string> files, ISet<string> visitedProjects)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        try
+        {
+            for (short index = 1; index <= item.FileCount; index++)
+            {
+                TryAddFile(files, item.FileNames[index]);
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            CollectProjectFiles(item.SubProject, files, visitedProjects);
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (item.ProjectItems is null)
+            {
+                return;
+            }
+
+            foreach (ProjectItem child in item.ProjectItems)
+            {
+                CollectProjectItemFiles(child, files, visitedProjects);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static string? TryGetProjectKey(Project project)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(project.UniqueName))
+            {
+                return project.UniqueName;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            return project.FullName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void TryAddFile(ICollection<string> files, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var filePath = path!;
+        if (File.Exists(filePath))
+        {
+            files.Add(filePath);
+        }
     }
 
     private static string MakeRelative(string root, string file)

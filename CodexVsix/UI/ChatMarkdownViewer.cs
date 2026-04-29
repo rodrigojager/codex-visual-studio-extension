@@ -1,3 +1,5 @@
+using System;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -8,6 +10,9 @@ namespace CodexVsix.UI;
 
 public sealed class ChatMarkdownViewer : RichTextBox
 {
+    private const double MinimumNaturalWidth = 24d;
+    private const double NaturalWidthPadding = 20d;
+
     private bool _isRenderingDocument;
 
     public static readonly DependencyProperty MarkdownTextProperty = DependencyProperty.Register(
@@ -97,6 +102,20 @@ public sealed class ChatMarkdownViewer : RichTextBox
         }
     }
 
+    protected override Size MeasureOverride(Size constraint)
+    {
+        if (double.IsInfinity(constraint.Width) || constraint.Width <= 0)
+        {
+            return base.MeasureOverride(constraint);
+        }
+
+        var naturalWidth = CalculateNaturalWidth(constraint.Width);
+        var targetWidth = Math.Max(MinimumNaturalWidth, Math.Min(constraint.Width, naturalWidth));
+        var measured = base.MeasureOverride(new Size(targetWidth, constraint.Height));
+
+        return new Size(targetWidth, measured.Height);
+    }
+
     private void RenderDocument()
     {
         _isRenderingDocument = true;
@@ -111,5 +130,59 @@ public sealed class ChatMarkdownViewer : RichTextBox
         {
             _isRenderingDocument = false;
         }
+    }
+
+    private double CalculateNaturalWidth(double maxWidth)
+    {
+        var markdown = MarkdownText ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(markdown))
+        {
+            return MinimumNaturalWidth;
+        }
+
+        if (ContainsWidthHungryMarkdown(markdown))
+        {
+            return maxWidth;
+        }
+
+        var maxLineWidth = 0d;
+        var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            maxLineWidth = Math.Max(maxLineWidth, MeasureLineWidth(line));
+            if (maxLineWidth + NaturalWidthPadding >= maxWidth)
+            {
+                return maxWidth;
+            }
+        }
+
+        return Math.Ceiling(maxLineWidth + NaturalWidthPadding);
+    }
+
+    private static bool ContainsWidthHungryMarkdown(string markdown)
+    {
+        return markdown.IndexOf("```", StringComparison.Ordinal) >= 0;
+    }
+
+    private double MeasureLineWidth(string line)
+    {
+        var typeface = new Typeface(FontFamily, FontStyle, FontWeight, FontStretch);
+        var pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var formattedText = new FormattedText(
+            line,
+            CultureInfo.CurrentUICulture,
+            FlowDirection,
+            typeface,
+            FontSize,
+            Foreground,
+            pixelsPerDip);
+
+        return formattedText.WidthIncludingTrailingWhitespace;
     }
 }

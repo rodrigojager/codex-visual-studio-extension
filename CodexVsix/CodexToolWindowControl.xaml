@@ -2110,6 +2110,7 @@
                 <ScrollViewer x:Name="ChatScrollViewer"
                               Grid.Row="1"
                               Grid.Column="0"
+                              HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="ChatContentHost">
                         <ItemsControl ItemsSource="{Binding Messages}">
@@ -2126,9 +2127,10 @@
                                         <StackPanel>
                                             <Grid x:Name="MessageHeaderRow"
                                                   Margin="0,0,0,8"
+                                                  HorizontalAlignment="Left"
                                                   Visibility="Collapsed">
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBox x:Name="EventTitle"
@@ -2192,7 +2194,8 @@
                                                     </Grid>
                                                 </Border>
                                             </Grid>
-                                            <DockPanel LastChildFill="True">
+                                            <DockPanel LastChildFill="False"
+                                                       HorizontalAlignment="Left">
                                                 <ItemsControl x:Name="UserPromptSkillChips"
                                                               DockPanel.Dock="Left"
                                                               Margin="0,0,8,0"
@@ -2231,6 +2234,7 @@
                                                          Style="{StaticResource ChatMessageTextBoxStyle}"
                                                          Foreground="{StaticResource TextPrimaryBrush}"
                                                          FontSize="13"
+                                                         HorizontalAlignment="Left"
                                                          MinWidth="24"
                                                          Loaded="OnChatTextBoxLoaded"
                                                          Unloaded="OnChatTextBoxUnloaded"
@@ -2241,6 +2245,8 @@
                                                                    Tag="ChatSelectable"
                                                                    Margin="0"
                                                                    Padding="0"
+                                                                   MinWidth="24"
+                                                                   HorizontalAlignment="Left"
                                                                    Background="Transparent"
                                                                    BorderThickness="0"
                                                                    Foreground="{StaticResource TextPrimaryBrush}"
@@ -2255,6 +2261,7 @@
                                             <Border x:Name="EventDetailHost"
                                                     Margin="0,10,0,0"
                                                     Padding="10,8"
+                                                    HorizontalAlignment="Left"
                                                     Background="{StaticResource EventDetailBrush}"
                                                     BorderBrush="{StaticResource PanelBorderSoftBrush}"
                                                     BorderThickness="1"
