@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace CodexVsix.UI;
@@ -14,6 +15,18 @@ public sealed class ChatMarkdownViewer : RichTextBox
         typeof(string),
         typeof(ChatMarkdownViewer),
         new PropertyMetadata(string.Empty, OnMarkdownTextChanged));
+
+    public static readonly DependencyProperty LinkCommandProperty = DependencyProperty.Register(
+        nameof(LinkCommand),
+        typeof(ICommand),
+        typeof(ChatMarkdownViewer),
+        new PropertyMetadata(null, OnRenderContextChanged));
+
+    public static readonly DependencyProperty WorkspaceRootProperty = DependencyProperty.Register(
+        nameof(WorkspaceRoot),
+        typeof(string),
+        typeof(ChatMarkdownViewer),
+        new PropertyMetadata(string.Empty, OnRenderContextChanged));
 
     public ChatMarkdownViewer()
     {
@@ -38,6 +51,18 @@ public sealed class ChatMarkdownViewer : RichTextBox
         set => SetValue(MarkdownTextProperty, value);
     }
 
+    public ICommand? LinkCommand
+    {
+        get => (ICommand?)GetValue(LinkCommandProperty);
+        set => SetValue(LinkCommandProperty, value);
+    }
+
+    public string WorkspaceRoot
+    {
+        get => (string)GetValue(WorkspaceRootProperty);
+        set => SetValue(WorkspaceRootProperty, value);
+    }
+
     private static void OnMarkdownTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not ChatMarkdownViewer viewer)
@@ -46,6 +71,14 @@ public sealed class ChatMarkdownViewer : RichTextBox
         }
 
         viewer.RenderDocument();
+    }
+
+    private static void OnRenderContextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ChatMarkdownViewer viewer)
+        {
+            viewer.RenderDocument();
+        }
     }
 
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
@@ -69,7 +102,10 @@ public sealed class ChatMarkdownViewer : RichTextBox
         _isRenderingDocument = true;
         try
         {
-            Document = MarkdownRenderer.CreateDocument(MarkdownText ?? string.Empty, Foreground);
+            Document = MarkdownRenderer.CreateDocument(
+                MarkdownText ?? string.Empty,
+                Foreground,
+                new MarkdownRenderOptions(LinkCommand, WorkspaceRoot));
         }
         finally
         {

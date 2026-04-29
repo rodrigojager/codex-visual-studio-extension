@@ -120,6 +120,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         OpenCodexDocsCommand = new DelegateCommand(OpenCodexDocs);
         OpenKeyboardShortcutsCommand = new DelegateCommand(OpenKeyboardShortcuts);
         OpenPathCommand = new DelegateCommand(OpenPath);
+        OpenReferencedPathCommand = new DelegateCommand(OpenReferencedPath, CanOpenReferencedPath);
         RefreshCodexStatusCommand = new DelegateCommand(RefreshCodexStatus);
         RunCodexLoginCommand = new DelegateCommand(RunCodexLogin, _ => CanRunCodexLogin);
         CopyCodexInstallCommand = new DelegateCommand(CopyCodexInstallCommandText);
@@ -316,6 +317,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public DelegateCommand OpenCodexDocsCommand { get; }
     public DelegateCommand OpenKeyboardShortcutsCommand { get; }
     public DelegateCommand OpenPathCommand { get; }
+    public DelegateCommand OpenReferencedPathCommand { get; }
     public DelegateCommand RefreshCodexStatusCommand { get; }
     public DelegateCommand RunCodexLoginCommand { get; }
     public DelegateCommand CopyCodexInstallCommand { get; }
@@ -1989,6 +1991,135 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             _solutionContextService.OpenPath(path);
         });
+    }
+
+    private void OpenReferencedPath(object? parameter)
+    {
+        if (parameter is not string reference || string.IsNullOrWhiteSpace(reference))
+        {
+            return;
+        }
+
+        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            if (TryResolveReferencedFile(reference, out var resolved))
+            {
+                _solutionContextService.OpenFileInVisualStudio(resolved.Path, resolved.Line, resolved.Column);
+            }
+        });
+    }
+
+    private bool CanOpenReferencedPath(object? parameter)
+    {
+        return parameter is string reference
+            && TryResolveReferencedFile(reference, out _);
+    }
+
+    private bool TryResolveReferencedFile(string reference, out ReferencedFile resolved)
+    {
+        resolved = default;
+        var normalized = NormalizeReferencedFileText(reference);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri)
+            && string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = uri.LocalPath;
+        }
+
+        var pathText = StripReferencedFilePosition(normalized, out var line, out var column);
+        foreach (var candidate in GetReferencedFileCandidates(pathText))
+        {
+            try
+            {
+                var fullPath = Path.GetFullPath(candidate);
+                if (File.Exists(fullPath))
+                {
+                    resolved = new ReferencedFile(fullPath, line, column);
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return false;
+    }
+
+    private IEnumerable<string> GetReferencedFileCandidates(string pathText)
+    {
+        if (string.IsNullOrWhiteSpace(pathText))
+        {
+            yield break;
+        }
+
+        if (Path.IsPathRooted(pathText))
+        {
+            yield return pathText;
+            yield break;
+        }
+
+        var workingDirectory = (Settings.WorkingDirectory ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            yield return Path.Combine(workingDirectory, pathText);
+        }
+
+        var solutionDirectory = _solutionContextService.TryGetSolutionDirectory();
+        if (!string.IsNullOrWhiteSpace(solutionDirectory)
+            && !string.Equals(solutionDirectory, workingDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return Path.Combine(solutionDirectory, pathText);
+        }
+    }
+
+    private static string NormalizeReferencedFileText(string reference)
+    {
+        return (reference ?? string.Empty)
+            .Trim()
+            .Trim('`', '\'', '"', '<', '>')
+            .TrimEnd('.', ',', ';');
+    }
+
+    private static string StripReferencedFilePosition(string reference, out int? line, out int? column)
+    {
+        line = null;
+        column = null;
+
+        var match = Regex.Match(reference, @"^(?<path>.+?)(?::(?<line>\d+)(?::(?<column>\d+))?)$");
+        if (!match.Success)
+        {
+            return reference;
+        }
+
+        line = int.TryParse(match.Groups["line"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedLine)
+            ? parsedLine
+            : null;
+        column = int.TryParse(match.Groups["column"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedColumn)
+            ? parsedColumn
+            : null;
+        return match.Groups["path"].Value;
+    }
+
+    private readonly struct ReferencedFile
+    {
+        public ReferencedFile(string path, int? line, int? column)
+        {
+            Path = path;
+            Line = line;
+            Column = column;
+        }
+
+        public string Path { get; }
+
+        public int? Line { get; }
+
+        public int? Column { get; }
     }
 
     private void RefreshIntegrations()

@@ -11,10 +11,27 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
+using File = System.IO.File;
+using IOPath = System.IO.Path;
 
 namespace CodexVsix.UI;
+
+internal sealed class MarkdownRenderOptions
+{
+    public MarkdownRenderOptions(ICommand? linkCommand = null, string? workspaceRoot = null)
+    {
+        LinkCommand = linkCommand;
+        WorkspaceRoot = workspaceRoot ?? string.Empty;
+    }
+
+    public ICommand? LinkCommand { get; }
+
+    public string WorkspaceRoot { get; }
+}
 
 internal static class MarkdownRenderer
 {
@@ -23,9 +40,14 @@ internal static class MarkdownRenderer
     // Rendering helpers are static; keep theme context thread-local for the active CreateDocument call.
     [ThreadStatic]
     private static MarkdownRenderTheme? _currentTheme;
+    [ThreadStatic]
+    private static MarkdownRenderOptions? _currentOptions;
     private static readonly Regex HeadingRegex = new(@"^(#{1,6})\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex BulletRegex = new(@"^\s*[-*+]\s+(.*)$", RegexOptions.Compiled);
     private static readonly Regex OrderedRegex = new(@"^\s*\d+\.\s+(.*)$", RegexOptions.Compiled);
+    private static readonly Regex FileReferenceRegex = new(
+        @"(?<![\w@:/\\])(?<path>(?:[A-Za-z]:[\\/]|(?:\.{1,2}[\\/])?[\w.-]+[\\/])(?:[\w .(){}\[\]@#+=-]+[\\/])*[\w .(){}\[\]@#+=-]+\.[A-Za-z0-9]{1,12})(?<position>:(?<line>\d+)(?::(?<column>\d+))?)?",
+        RegexOptions.Compiled);
     private static readonly Regex MermaidEdgeRegex = new(@"(?<from>[A-Za-z0-9_.-]+)(?:\[(?<fromLabel>[^\]]+)\]|\((?<fromRound>[^)]+)\)|\{(?<fromBrace>[^}]+)\})?\s*(?<arrow>-{1,2}\.?-?>|={2,}>|--x)\s*(?:\|(?<edgeLabel>[^|]+)\|)?\s*(?<to>[A-Za-z0-9_.-]+)(?:\[(?<toLabel>[^\]]+)\]|\((?<toRound>[^)]+)\)|\{(?<toBrace>[^}]+)\})?", RegexOptions.Compiled);
     private static readonly Regex MermaidTextLabelEdgeRegex = new(@"(?<from>[A-Za-z0-9_.-]+)(?:\[(?<fromLabel>[^\]]+)\]|\((?<fromRound>[^)]+)\)|\{(?<fromBrace>[^}]+)\})?\s*--\s*(?<edgeLabel>[^-][^-]*?)\s*-->\s*(?<to>[A-Za-z0-9_.-]+)(?:\[(?<toLabel>[^\]]+)\]|\((?<toRound>[^)]+)\)|\{(?<toBrace>[^}]+)\})?", RegexOptions.Compiled);
     private static readonly Regex MermaidNodeRegex = new(@"^(?<id>[A-Za-z0-9_.-]+)(?:\[(?<label>[^\]]+)\]|\((?<round>[^)]+)\)|\{(?<brace>[^}]+)\})$", RegexOptions.Compiled);
@@ -40,11 +62,14 @@ internal static class MarkdownRenderer
         RegexOptions.Compiled | RegexOptions.Multiline);
 
     private static MarkdownRenderTheme CurrentTheme => _currentTheme ??= MarkdownRenderTheme.Create(null);
+    private static MarkdownRenderOptions CurrentOptions => _currentOptions ??= new MarkdownRenderOptions();
 
-    public static FlowDocument CreateDocument(string markdown, Brush? foreground = null)
+    public static FlowDocument CreateDocument(string markdown, Brush? foreground = null, MarkdownRenderOptions? options = null)
     {
         var previousTheme = _currentTheme;
+        var previousOptions = _currentOptions;
         _currentTheme = MarkdownRenderTheme.Create(foreground);
+        _currentOptions = options ?? new MarkdownRenderOptions();
 
         try
         {
@@ -72,6 +97,7 @@ internal static class MarkdownRenderer
         finally
         {
             _currentTheme = previousTheme;
+            _currentOptions = previousOptions;
         }
     }
 
@@ -261,6 +287,7 @@ internal static class MarkdownRenderer
         var candidates = new List<InlineMatch>();
         AddInlineMatch(candidates, text, @"`(?<content>[^`]+)`", match => CreateInlineCode(match.Groups["content"].Value));
         AddInlineMatch(candidates, text, @"\[(?<label>[^\]]+)\]\((?<url>[^)]+)\)", match => CreateHyperlink(match.Groups["label"].Value, match.Groups["url"].Value));
+        AddInlineMatch(candidates, text, FileReferenceRegex, match => CreateFileReferenceHyperlink(match.Value));
         AddInlineMatch(candidates, text, @"\*\*(?<content>[^*]+)\*\*", match => new Bold(new Run(match.Groups["content"].Value)));
         AddInlineMatch(candidates, text, @"\*(?<content>[^*]+)\*", match => new Italic(new Run(match.Groups["content"].Value)));
 
@@ -272,7 +299,16 @@ internal static class MarkdownRenderer
 
     private static void AddInlineMatch(List<InlineMatch> matches, string text, string pattern, Func<Match, Inline> factory)
     {
-        var match = Regex.Match(text, pattern);
+        AddInlineMatch(matches, Regex.Match(text, pattern), factory);
+    }
+
+    private static void AddInlineMatch(List<InlineMatch> matches, string text, Regex regex, Func<Match, Inline> factory)
+    {
+        AddInlineMatch(matches, regex.Match(text), factory);
+    }
+
+    private static void AddInlineMatch(List<InlineMatch> matches, Match match, Func<Match, Inline> factory)
+    {
         if (match.Success)
         {
             matches.Add(new InlineMatch(match.Index, match.Length, () => factory(match)));
@@ -281,6 +317,11 @@ internal static class MarkdownRenderer
 
     private static Inline CreateInlineCode(string code)
     {
+        if (TryResolveWorkspaceFileReference(code, out var target))
+        {
+            return CreateFileReferenceHyperlink(code, target, renderAsInlineCode: true);
+        }
+
         var border = new Border
         {
             Background = CreateBrush(CurrentTheme.InlineCodeBackgroundColor),
@@ -311,10 +352,17 @@ internal static class MarkdownRenderer
             Cursor = System.Windows.Input.Cursors.Hand
         };
 
-        hyperlink.Click += (_, _) =>
+        hyperlink.Click += (_, e) =>
         {
+            e.Handled = true;
+
             try
             {
+                if (TryExecuteLinkCommand(url))
+                {
+                    return;
+                }
+
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = url,
@@ -327,6 +375,186 @@ internal static class MarkdownRenderer
         };
 
         return hyperlink;
+    }
+
+    private static Inline CreateFileReferenceHyperlink(string reference)
+    {
+        var displayText = TrimFileReferenceDisplay(reference);
+        if (!TryResolveWorkspaceFileReference(displayText, out var target))
+        {
+            return new Run(reference);
+        }
+
+        return CreateFileReferenceHyperlink(displayText, target, renderAsInlineCode: false);
+    }
+
+    private static Inline CreateFileReferenceHyperlink(string label, string target, bool renderAsInlineCode)
+    {
+        var hyperlink = new Hyperlink();
+
+        if (renderAsInlineCode)
+        {
+            hyperlink.Inlines.Add(new InlineUIContainer(CreateInlineCodeBorder(label))
+            {
+                BaselineAlignment = BaselineAlignment.Center
+            });
+        }
+        else
+        {
+            hyperlink.Inlines.Add(new Run(label));
+            hyperlink.Foreground = CreateBrush(CurrentTheme.LinkColor);
+        }
+
+        hyperlink.Cursor = System.Windows.Input.Cursors.Hand;
+        hyperlink.ToolTip = target;
+        hyperlink.Click += (_, e) =>
+        {
+            e.Handled = true;
+            TryExecuteLinkCommand(target);
+        };
+
+        return hyperlink;
+    }
+
+    private static Border CreateInlineCodeBorder(string code)
+    {
+        return new Border
+        {
+            Background = CreateBrush(CurrentTheme.InlineCodeBackgroundColor),
+            BorderBrush = CreateBrush(CurrentTheme.InlineCodeBorderColor),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(4, 1, 4, 1),
+            Margin = new Thickness(1, 0, 1, 0),
+            Child = new TextBlock
+            {
+                Text = code,
+                FontFamily = new FontFamily("Consolas"),
+                Foreground = CreateBrush(CurrentTheme.LinkColor)
+            }
+        };
+    }
+
+    private static bool TryExecuteLinkCommand(string target)
+    {
+        var command = CurrentOptions.LinkCommand;
+        if (command is null || string.IsNullOrWhiteSpace(target) || IsExternalUri(target))
+        {
+            return false;
+        }
+
+        if (!command.CanExecute(target))
+        {
+            return false;
+        }
+
+        command.Execute(target);
+        return true;
+    }
+
+    private static bool TryResolveWorkspaceFileReference(string reference, out string target)
+    {
+        target = string.Empty;
+        var normalizedReference = TrimFileReferenceDisplay(reference);
+        if (string.IsNullOrWhiteSpace(normalizedReference) || IsExternalUri(normalizedReference))
+        {
+            return false;
+        }
+
+        var pathPart = StripFilePosition(normalizedReference, out var position);
+        if (string.IsNullOrWhiteSpace(pathPart))
+        {
+            return false;
+        }
+
+        var workspaceRoot = CurrentOptions.WorkspaceRoot;
+        var candidate = pathPart;
+        if (!IOPath.IsPathRooted(candidate))
+        {
+            if (string.IsNullOrWhiteSpace(workspaceRoot))
+            {
+                return false;
+            }
+
+            candidate = IOPath.Combine(workspaceRoot, candidate);
+        }
+
+        try
+        {
+            var fullPath = IOPath.GetFullPath(candidate);
+            if (!File.Exists(fullPath) || !IsPathInsideWorkspace(fullPath, workspaceRoot))
+            {
+                return false;
+            }
+
+            target = fullPath + position;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsPathInsideWorkspace(string fullPath, string workspaceRoot)
+    {
+        if (string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            return IOPath.IsPathRooted(fullPath);
+        }
+
+        try
+        {
+            var root = IOPath.GetFullPath(workspaceRoot);
+            var normalizedRoot = root.TrimEnd(IOPath.DirectorySeparatorChar, IOPath.AltDirectorySeparatorChar) + IOPath.DirectorySeparatorChar;
+            return fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(fullPath.TrimEnd(IOPath.DirectorySeparatorChar, IOPath.AltDirectorySeparatorChar), root.TrimEnd(IOPath.DirectorySeparatorChar, IOPath.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string StripFilePosition(string value, out string position)
+    {
+        position = string.Empty;
+        var match = Regex.Match(value, @"^(?<path>.+?)(?<position>:(?<line>\d+)(?::(?<column>\d+))?)$");
+        if (!match.Success)
+        {
+            return value;
+        }
+
+        var path = match.Groups["path"].Value;
+        if (IOPath.IsPathRooted(value) && Regex.IsMatch(value, @"^[A-Za-z]:[\\/][^:]+$"))
+        {
+            return value;
+        }
+
+        position = match.Groups["position"].Value;
+        return path;
+    }
+
+    private static string TrimFileReferenceDisplay(string reference)
+    {
+        return (reference ?? string.Empty)
+            .Trim()
+            .TrimEnd('.', ',', ';');
+    }
+
+    private static bool IsExternalUri(string target)
+    {
+        if (!Uri.TryCreate(target, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        if (uri.Scheme.Length == 1 && char.IsLetter(uri.Scheme[0]))
+        {
+            return false;
+        }
+
+        return !string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase);
     }
 
     private static FrameworkElement CreateCodeBlock(string code, string language)
@@ -384,7 +612,27 @@ internal static class MarkdownRenderer
         }
 
         var copyButton = CreateIconButton(CopyIconPathData, Localization.CopyButton);
-        copyButton.Click += (_, _) => Clipboard.SetText(contentToCopy ?? string.Empty);
+        copyButton.RequestBringIntoView += (_, e) => e.Handled = true;
+        copyButton.Click += (sender, e) =>
+        {
+            e.Handled = true;
+            var scrollViewer = sender is DependencyObject source ? FindAncestor<ScrollViewer>(source) : null;
+            var horizontalOffset = scrollViewer?.HorizontalOffset ?? 0d;
+            var verticalOffset = scrollViewer?.VerticalOffset ?? 0d;
+
+            Clipboard.SetText(contentToCopy ?? string.Empty);
+
+            if (scrollViewer is not null)
+            {
+                scrollViewer.Dispatcher.BeginInvoke(
+                    new Action(() =>
+                    {
+                        scrollViewer.ScrollToHorizontalOffset(horizontalOffset);
+                        scrollViewer.ScrollToVerticalOffset(verticalOffset);
+                    }),
+                    DispatcherPriority.ContextIdle);
+            }
+        };
         actionsHost.Children.Add(copyButton);
 
         DockPanel.SetDock(actionsHost, Dock.Right);
@@ -529,6 +777,8 @@ internal static class MarkdownRenderer
             BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Cursor = System.Windows.Input.Cursors.Hand,
+            Focusable = false,
+            IsTabStop = false,
             ToolTip = toolTip,
             Content = new Viewbox
             {
@@ -583,6 +833,23 @@ internal static class MarkdownRenderer
         button.Template = template;
 
         return button;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? source)
+        where T : DependencyObject
+    {
+        var current = source;
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private static FrameworkElement CreateCodeViewer(string code, string language)

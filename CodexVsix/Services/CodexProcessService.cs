@@ -22,6 +22,18 @@ public sealed class CodexProcessService : IDisposable
     private static readonly string[] ExtensionContextPrefixes = CreateLocalizedSet(localization => localization.ExtensionContextPrefix);
     private static readonly string[] PreferredMcpPrefixes = CreateLocalizedSet(localization => localization.PreferredMcpPrefix);
     private static readonly string[] IdeContextPrefixes = CreateLocalizedSet(localization => localization.IdeContextPrefix);
+    private static readonly string[] SyntheticUserContextPrefixes =
+    {
+        "# AGENTS.md instructions",
+        "<environment_context>",
+        "<permissions instructions>",
+        "<apps_instructions>",
+        "<skills_instructions>",
+        "<plugins_instructions>",
+        "<collaboration_mode>",
+        "<turn_aborted>"
+    };
+
     private static readonly string[] IdeContextLinePrefixes = CreateLocalizedSet(
         localization => localization.IdeContextSolutionLabel,
         localization => localization.IdeContextActiveDocumentLabel,
@@ -297,10 +309,11 @@ public sealed class CodexProcessService : IDisposable
         }
 
         var summary = ParseThreadSummary(thread, threadId) ?? new CodexThreadSummary { ThreadId = threadId };
+        var sessionPath = thread["path"]?.Value<string>() ?? FindSessionPathForThread(summary.ThreadId);
         return new CodexThreadConversation
         {
             Thread = summary,
-            Messages = ParseThreadMessages(thread)
+            Messages = ParseThreadMessages(thread, summary.ThreadId, sessionPath)
         };
     }
 
@@ -2750,14 +2763,23 @@ public sealed class CodexProcessService : IDisposable
         return text;
     }
 
-    private static IReadOnlyList<ChatMessage> ParseThreadMessages(JToken thread)
+    private static IReadOnlyList<ChatMessage> ParseThreadMessages(JToken thread, string? threadId, string? sessionPath)
     {
+        var sessionMessages = ReadMessagesFromSession(sessionPath);
+        if (sessionMessages.Any(message => message.IsUser))
+        {
+            return sessionMessages;
+        }
+
         var messages = new List<ChatMessage>();
         var turns = thread["turns"] as JArray;
         if (turns is null)
         {
-            return messages;
+            return sessionMessages.Count > 0 ? sessionMessages : messages;
         }
+
+        var fallbackPrompts = ReadPromptHistoryForThread(threadId);
+        var fallbackPromptIndex = 0;
 
         foreach (var turn in turns)
         {
@@ -2767,17 +2789,195 @@ public sealed class CodexProcessService : IDisposable
                 continue;
             }
 
+            var turnMessages = new List<ChatMessage>();
             foreach (var item in items)
             {
                 var message = ParseThreadMessage(item);
                 if (message is not null)
                 {
-                    messages.Add(message);
+                    turnMessages.Add(message);
                 }
             }
+
+            if (!turnMessages.Any(message => message.IsUser) && fallbackPromptIndex < fallbackPrompts.Count)
+            {
+                messages.Add(new ChatMessage(true, fallbackPrompts[fallbackPromptIndex]));
+                fallbackPromptIndex++;
+            }
+            else if (turnMessages.Any(message => message.IsUser))
+            {
+                fallbackPromptIndex++;
+            }
+
+            messages.AddRange(turnMessages);
+        }
+
+        while (fallbackPromptIndex < fallbackPrompts.Count)
+        {
+            messages.Add(new ChatMessage(true, fallbackPrompts[fallbackPromptIndex]));
+            fallbackPromptIndex++;
         }
 
         return messages;
+    }
+
+    private static IReadOnlyList<ChatMessage> ReadMessagesFromSession(string? sessionPath)
+    {
+        if (string.IsNullOrWhiteSpace(sessionPath) || !File.Exists(sessionPath))
+        {
+            return Array.Empty<ChatMessage>();
+        }
+
+        var responseMessages = new List<ChatMessage>();
+        var eventMessages = new List<ChatMessage>();
+        try
+        {
+            using var reader = new StreamReader(sessionPath, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            string? line;
+            while ((line = reader.ReadLine()) is not null)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                var entry = JObject.Parse(line);
+                var responseMessage = ParseSessionResponseMessage(entry);
+                if (responseMessage is not null)
+                {
+                    responseMessages.Add(responseMessage);
+                    continue;
+                }
+
+                var eventMessage = ParseSessionEventMessage(entry);
+                if (eventMessage is not null)
+                {
+                    eventMessages.Add(eventMessage);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return responseMessages.Count > 0 ? responseMessages : eventMessages;
+    }
+
+    private static ChatMessage? ParseSessionResponseMessage(JObject entry)
+    {
+        if (!string.Equals(entry["type"]?.Value<string>(), "response_item", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var payload = entry["payload"];
+        if (!string.Equals(payload?["type"]?.Value<string>(), "message", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return ParseRoleMessage(payload);
+    }
+
+    private static ChatMessage? ParseSessionEventMessage(JObject entry)
+    {
+        if (!string.Equals(entry["type"]?.Value<string>(), "event_msg", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var payload = entry["payload"];
+        var payloadType = payload?["type"]?.Value<string>();
+        switch (payloadType)
+        {
+            case "user_message":
+                var userText = NormalizeUserMessageTextSegment(payload?["message"]?.Value<string>());
+                return string.IsNullOrWhiteSpace(userText) ? null : new ChatMessage(true, userText);
+
+            case "agent_message":
+                var agentText = payload?["message"]?.Value<string>();
+                return string.IsNullOrWhiteSpace(agentText) ? null : new ChatMessage(false, agentText);
+
+            default:
+                return null;
+        }
+    }
+
+    private static string? FindSessionPathForThread(string? threadId)
+    {
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            return null;
+        }
+
+        var sessionsRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".codex",
+            "sessions");
+
+        if (!Directory.Exists(sessionsRoot))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Directory.EnumerateFiles(sessionsRoot, "*.jsonl", SearchOption.AllDirectories)
+                .FirstOrDefault(path => Path.GetFileNameWithoutExtension(path).IndexOf(threadId, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<string> ReadPromptHistoryForThread(string? threadId)
+    {
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            return Array.Empty<string>();
+        }
+
+        var historyPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".codex",
+            "history.jsonl");
+
+        if (!File.Exists(historyPath))
+        {
+            return Array.Empty<string>();
+        }
+
+        var prompts = new List<string>();
+        try
+        {
+            using var reader = new StreamReader(historyPath, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            string? line;
+            while ((line = reader.ReadLine()) is not null)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                var entry = JObject.Parse(line);
+                if (!string.Equals(entry["session_id"]?.Value<string>(), threadId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var prompt = NormalizeUserMessageTextSegment(entry["text"]?.Value<string>());
+                if (!string.IsNullOrWhiteSpace(prompt))
+                {
+                    prompts.Add(prompt);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return prompts;
     }
 
     private static ChatMessage? ParseThreadMessage(JToken? item)
@@ -2785,17 +2985,20 @@ public sealed class CodexProcessService : IDisposable
         var itemType = item?["type"]?.Value<string>();
         switch (itemType)
         {
+            case "message":
+                return ParseRoleMessage(item);
+
             case "userMessage":
                 var userText = ExtractUserMessageText(item?["content"]);
+                if (string.IsNullOrWhiteSpace(userText))
+                {
+                    userText = ExtractUserMessageText(item?["text"] ?? item?["message"]);
+                }
+
                 return string.IsNullOrWhiteSpace(userText) ? null : new ChatMessage(true, userText);
 
             case "agentMessage":
-                var agentText = item?["text"]?.Value<string>();
-                if (string.IsNullOrWhiteSpace(agentText))
-                {
-                    agentText = ExtractText(item?["content"]);
-                }
-
+                var agentText = ExtractAgentMessageText(item);
                 return string.IsNullOrWhiteSpace(agentText) ? null : new ChatMessage(false, agentText);
 
             case "plan":
@@ -2820,10 +3023,59 @@ public sealed class CodexProcessService : IDisposable
         }
     }
 
+    private static ChatMessage? ParseRoleMessage(JToken? item)
+    {
+        var role = item?["role"]?.Value<string>();
+        if (string.Equals(role, "user", StringComparison.OrdinalIgnoreCase))
+        {
+            var userText = ExtractUserMessageText(item?["content"]);
+            if (string.IsNullOrWhiteSpace(userText))
+            {
+                userText = ExtractUserMessageText(item?["text"] ?? item?["message"]);
+            }
+
+            return string.IsNullOrWhiteSpace(userText) ? null : new ChatMessage(true, userText);
+        }
+
+        if (string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "agent", StringComparison.OrdinalIgnoreCase))
+        {
+            var agentText = ExtractAgentMessageText(item);
+            return string.IsNullOrWhiteSpace(agentText) ? null : new ChatMessage(false, agentText);
+        }
+
+        return null;
+    }
+
+    private static string ExtractAgentMessageText(JToken? item)
+    {
+        var text = item?["text"]?.Value<string>();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            text = ExtractText(item?["content"]);
+        }
+
+        return text ?? string.Empty;
+    }
+
     private static string ExtractUserMessageText(JToken? content)
     {
-        var items = content as JArray;
-        if (items is null)
+        if (content is null)
+        {
+            return string.Empty;
+        }
+
+        if (content.Type == JTokenType.String)
+        {
+            return NormalizeUserMessageTextSegment(content.Value<string>());
+        }
+
+        if (content is JObject obj)
+        {
+            return ExtractUserMessageText(new JArray(obj));
+        }
+
+        if (content is not JArray items)
         {
             return string.Empty;
         }
@@ -2834,18 +3086,18 @@ public sealed class CodexProcessService : IDisposable
             switch (item?["type"]?.Value<string>())
             {
                 case "text":
+                case "input_text":
                     var text = item?["text"]?.Value<string>();
-                    if (!string.IsNullOrWhiteSpace(text)
-                        && !StartsWithAny(text.TrimStart(), ExtensionContextPrefixes)
-                        && !StartsWithAny(text.TrimStart(), IdeContextPrefixes)
-                        && !StartsWithAny(text.TrimStart(), PreferredMcpPrefixes))
+                    var normalizedText = NormalizeUserMessageTextSegment(text);
+                    if (!string.IsNullOrWhiteSpace(normalizedText))
                     {
-                        segments.Add(text.Trim());
+                        segments.Add(normalizedText);
                     }
                     break;
 
                 case "localImage":
                 case "image":
+                case "input_image":
                     segments.Add("[image]");
                     break;
 
@@ -2864,10 +3116,37 @@ public sealed class CodexProcessService : IDisposable
                         segments.Add("$" + skill);
                     }
                     break;
+
+                default:
+                    var fallbackText = NormalizeUserMessageTextSegment(item?["text"]?.Value<string>());
+                    if (!string.IsNullOrWhiteSpace(fallbackText))
+                    {
+                        segments.Add(fallbackText);
+                    }
+                    break;
             }
         }
 
         return string.Join(" ", segments.Where(segment => !string.IsNullOrWhiteSpace(segment)));
+    }
+
+    private static string NormalizeUserMessageTextSegment(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = text.Trim();
+        if (StartsWithAny(trimmed, ExtensionContextPrefixes)
+            || StartsWithAny(trimmed, IdeContextPrefixes)
+            || StartsWithAny(trimmed, PreferredMcpPrefixes)
+            || StartsWithAny(trimmed, SyntheticUserContextPrefixes))
+        {
+            return string.Empty;
+        }
+
+        return trimmed;
     }
 
     private static ChatMessage? BuildThreadEventMessage(JToken? item)

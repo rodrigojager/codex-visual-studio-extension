@@ -9,6 +9,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <ui:PathToFileNameConverter x:Key="PathToFileNameConverter" />
+        <ui:ChatBubbleWidthConverter x:Key="ChatBubbleWidthConverter" />
         <ui:RecentHistoryMaxHeightConverter x:Key="RecentHistoryMaxHeightConverter" />
         <ui:ResponsivePanelWidthConverter x:Key="ResponsivePanelWidthConverter" />
         <ui:StringsEqualToVisibilityConverter x:Key="StringsEqualToVisibilityConverter" />
@@ -2114,9 +2115,10 @@
                         <ItemsControl ItemsSource="{Binding Messages}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
+                                    <Grid Width="{Binding RelativeSource={RelativeSource AncestorType=ScrollViewer}, Path=ActualWidth}">
                                     <Border x:Name="Bubble"
-                                            MaxWidth="540"
-                                            Margin="0,0,0,26"
+                                            MaxWidth="{Binding RelativeSource={RelativeSource AncestorType=ScrollViewer}, Path=ActualWidth, Converter={StaticResource ChatBubbleWidthConverter}}"
+                                            Margin="8,0,0,26"
                                             Padding="0"
                                             HorizontalAlignment="Left"
                                             Background="Transparent"
@@ -2246,6 +2248,8 @@
                                                                    Loaded="OnChatTextBoxLoaded"
                                                                    Unloaded="OnChatTextBoxUnloaded"
                                                                    PreviewMouseLeftButtonDown="OnChatTextBoxPreviewMouseLeftButtonDown"
+                                                                   LinkCommand="{Binding DataContext.OpenReferencedPathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                   WorkspaceRoot="{Binding DataContext.Settings.WorkingDirectory, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                    MarkdownText="{Binding Text}"
                                                                    Visibility="Collapsed" />
                                             <Border x:Name="EventDetailHost"
@@ -2278,12 +2282,15 @@
                                                                            Loaded="OnChatTextBoxLoaded"
                                                                            Unloaded="OnChatTextBoxUnloaded"
                                                                            PreviewMouseLeftButtonDown="OnChatTextBoxPreviewMouseLeftButtonDown"
+                                                                           LinkCommand="{Binding DataContext.OpenReferencedPathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                           WorkspaceRoot="{Binding DataContext.Settings.WorkingDirectory, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                            MarkdownText="{Binding Detail}"
                                                                            Visibility="Collapsed" />
                                                 </Grid>
                                             </Border>
                                         </StackPanel>
                                     </Border>
+                                    </Grid>
                                     <DataTemplate.Triggers>
                                         <DataTrigger Binding="{Binding HasHeader}" Value="True">
                                             <Setter TargetName="MessageHeaderRow" Property="Visibility" Value="Visible" />
@@ -2316,22 +2323,21 @@
                                             <Setter TargetName="Bubble" Property="Background" Value="{StaticResource UserBubbleBrush}" />
                                             <Setter TargetName="Bubble" Property="Padding" Value="14,11" />
                                             <Setter TargetName="Bubble" Property="CornerRadius" Value="18" />
-                                            <Setter TargetName="Bubble" Property="Margin" Value="96,0,8,26" />
+                                            <Setter TargetName="Bubble" Property="Margin" Value="0,0,8,26" />
                                             <Setter TargetName="BubbleText" Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsUser}" Value="False">
-                                            <Setter TargetName="Bubble" Property="Margin" Value="34,34,96,26" />
+                                            <Setter TargetName="Bubble" Property="Margin" Value="8,34,0,26" />
                                             <Setter TargetName="BubbleText" Property="FontSize" Value="14" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsEvent}" Value="True">
-                                            <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch" />
-                                            <Setter TargetName="Bubble" Property="MaxWidth" Value="680" />
+                                            <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Left" />
                                             <Setter TargetName="Bubble" Property="Background" Value="{StaticResource EventCardBrush}" />
                                             <Setter TargetName="Bubble" Property="BorderBrush" Value="{StaticResource EventCardBorderBrush}" />
                                             <Setter TargetName="Bubble" Property="BorderThickness" Value="1" />
                                             <Setter TargetName="Bubble" Property="Padding" Value="14,12" />
                                             <Setter TargetName="Bubble" Property="CornerRadius" Value="14" />
-                                            <Setter TargetName="Bubble" Property="Margin" Value="34,4,96,18" />
+                                            <Setter TargetName="Bubble" Property="Margin" Value="8,4,0,18" />
                                             <Setter TargetName="BubbleText" Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
                                             <Setter TargetName="BubbleText" Property="FontSize" Value="12" />
                                         </DataTrigger>

@@ -153,6 +153,77 @@ public sealed class SolutionContextService
         });
     }
 
+    public void OpenFileInVisualStudio(string path, int? line = null, int? column = null)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        if (!TryOpenDocumentInVisualStudio(path))
+        {
+            return;
+        }
+
+        if (line is > 0)
+        {
+            NavigateActiveDocument(line.Value, column);
+        }
+    }
+
+    private static bool TryOpenDocumentInVisualStudio(string path)
+    {
+        try
+        {
+            VsShellUtilities.OpenDocument(Microsoft.VisualStudio.Shell.ServiceProvider.GlobalProvider, path);
+            return true;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
+            if (dte?.ItemOperations is not null)
+            {
+                dte.ItemOperations.OpenFile(path, EnvDTE.Constants.vsViewKindTextView);
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private static void NavigateActiveDocument(int line, int? column)
+    {
+        try
+        {
+            var dte = Package.GetGlobalService(typeof(DTE)) as DTE;
+            var selection = dte?.ActiveDocument?.Selection as TextSelection;
+            if (selection is null)
+            {
+                return;
+            }
+
+            if (column is > 0)
+            {
+                selection.MoveToLineAndOffset(line, column.Value, false);
+            }
+            else
+            {
+                selection.GotoLine(line, false);
+            }
+        }
+        catch
+        {
+        }
+    }
+
     public void OpenUrl(string url)
     {
         if (string.IsNullOrWhiteSpace(url))
