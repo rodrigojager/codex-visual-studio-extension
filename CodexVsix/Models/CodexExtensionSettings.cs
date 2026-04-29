@@ -24,6 +24,10 @@ public sealed class CodexExtensionSettings
     [JsonIgnore]
     public string LastThreadWorkingDirectory { get; set; } = "";
     public List<string> PromptHistory { get; set; } = new();
+    public List<string> CustomModels { get; set; } = new();
+    public List<string> CustomReasoningEfforts { get; set; } = new();
+    public List<string> CustomVerbosityOptions { get; set; } = new();
+    public List<string> CustomServiceTiers { get; set; } = new();
     public List<CodexManagedMcpServer> ManagedMcpServers { get; set; } = new();
     public List<string> PreferredMcpServers { get; set; } = new();
     public bool StreamOutput { get; set; } = true;
@@ -31,4 +35,5 @@ public sealed class CodexExtensionSettings
     public bool AutoApprovePowerShell { get; set; } = false;
     public bool PlanModeEnabled { get; set; } = false;
     public bool IncludeIdeContext { get; set; } = true;
+    public bool IncludeHiddenModels { get; set; } = false;
 }

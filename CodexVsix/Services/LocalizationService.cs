@@ -1770,6 +1770,7 @@ public sealed class LocalizationService
     {
         return new[]
         {
+            new SelectionOption(Get("ReasoningMinimal"), "minimal"),
             new SelectionOption(Get("ReasoningLow"), "low"),
             new SelectionOption(Get("ReasoningMedium"), "medium"),
             new SelectionOption(Get("ReasoningHigh"), "high"),

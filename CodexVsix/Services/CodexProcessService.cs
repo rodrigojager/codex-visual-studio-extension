@@ -304,7 +304,7 @@ public sealed class CodexProcessService : IDisposable
         };
     }
 
-    public async Task<IReadOnlyList<SelectionOption>> ListModelsAsync(CodexExtensionSettings settings, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SelectionOption>> ListModelsAsync(CodexExtensionSettings settings, CancellationToken cancellationToken, bool includeHidden = false)
     {
         var workingDirectory = ResolveWorkingDirectory(settings.WorkingDirectory);
         await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
@@ -319,7 +319,7 @@ public sealed class CodexProcessService : IDisposable
 
         foreach (var item in items)
         {
-            if (item?["hidden"]?.Value<bool>() == true)
+            if (!includeHidden && item?["hidden"]?.Value<bool>() == true)
             {
                 continue;
             }
@@ -1479,7 +1479,7 @@ public sealed class CodexProcessService : IDisposable
         {
             ["id"] = id,
             ["method"] = method,
-            ["params"] = JObject.FromObject(parameters)
+            ["params"] = parameters is JObject requestParams ? requestParams : JObject.FromObject(parameters)
         });
 
         return tcs.Task;
@@ -1490,7 +1490,7 @@ public sealed class CodexProcessService : IDisposable
         WriteMessage(new JObject
         {
             ["method"] = method,
-            ["params"] = JObject.FromObject(parameters)
+            ["params"] = parameters is JObject notificationParams ? notificationParams : JObject.FromObject(parameters)
         });
 
         return Task.CompletedTask;
@@ -1544,10 +1544,10 @@ public sealed class CodexProcessService : IDisposable
 
     private object BuildTurnStartParams(string threadId, string prompt, CodexExtensionSettings settings, string workingDirectory, IEnumerable<string> imagePaths, string ideContextSummary)
     {
-        return BuildTurnStartParams(threadId, prompt, settings, workingDirectory, imagePaths, ideContextSummary, includeExecutionOverrides: true, includeCollaborationMode: true);
+        return BuildTurnStartParams(threadId, prompt, settings, workingDirectory, imagePaths, ideContextSummary, includeExecutionOverrides: true, includeCollaborationMode: true, includeVerbosity: true);
     }
 
-    private object BuildTurnStartParams(
+    private JObject BuildTurnStartParams(
         string threadId,
         string prompt,
         CodexExtensionSettings settings,
@@ -1555,31 +1555,39 @@ public sealed class CodexProcessService : IDisposable
         IEnumerable<string> imagePaths,
         string ideContextSummary,
         bool includeExecutionOverrides,
-        bool includeCollaborationMode)
+        bool includeCollaborationMode,
+        bool includeVerbosity)
     {
         var input = BuildUserInput(prompt, settings, workingDirectory, imagePaths, ideContextSummary);
+        var result = new JObject
+        {
+            ["threadId"] = threadId,
+            ["cwd"] = workingDirectory,
+            ["input"] = JArray.FromObject(input)
+        };
+
         if (!includeExecutionOverrides)
         {
-            return new
-            {
-                threadId,
-                cwd = workingDirectory,
-                input
-            };
+            return result;
         }
 
-        return new
+        AddIfNotBlank(result, "model", settings.DefaultModel);
+        AddIfNotBlank(result, "effort", settings.ReasoningEffort);
+        result["approvalPolicy"] = NormalizeApprovalPolicy(settings.ApprovalPolicy);
+        result["sandboxPolicy"] = JToken.FromObject(BuildSandboxPolicy(settings.SandboxMode));
+        AddIfNotBlank(result, "serviceTier", NormalizeServiceTier(settings.ServiceTier));
+
+        if (includeVerbosity)
         {
-            threadId,
-            cwd = workingDirectory,
-            model = string.IsNullOrWhiteSpace(settings.DefaultModel) ? null : settings.DefaultModel,
-            effort = string.IsNullOrWhiteSpace(settings.ReasoningEffort) ? null : settings.ReasoningEffort,
-            approvalPolicy = NormalizeApprovalPolicy(settings.ApprovalPolicy),
-            sandboxPolicy = BuildSandboxPolicy(settings.SandboxMode),
-            serviceTier = NormalizeServiceTier(settings.ServiceTier),
-            collaborationMode = includeCollaborationMode ? BuildCollaborationMode(settings) : null,
-            input
-        };
+            AddIfNotBlank(result, "verbosity", settings.ModelVerbosity);
+        }
+
+        if (includeCollaborationMode)
+        {
+            result["collaborationMode"] = BuildCollaborationMode(settings, includeVerbosity);
+        }
+
+        return result;
     }
 
     private async Task<JToken?> StartTurnWithFallbackAsync(
@@ -1592,13 +1600,14 @@ public sealed class CodexProcessService : IDisposable
         string ideContextSummary,
         CancellationToken cancellationToken)
     {
-        var attempts = new List<(string Label, bool IncludeExecutionOverrides, bool IncludeCollaborationMode)>
+        var attempts = new List<(string Label, bool IncludeExecutionOverrides, bool IncludeCollaborationMode, bool IncludeVerbosity)>
         {
-            ("full", true, true),
-            ("no-collaboration-mode", true, false)
+            ("full", true, true, true),
+            ("no-verbosity", true, true, false),
+            ("no-collaboration-mode", true, false, false)
         };
 
-        attempts.Add(("minimal", false, false));
+        attempts.Add(("minimal", false, false, false));
 
         Exception? lastError = null;
         for (var index = 0; index < attempts.Count; index++)
@@ -1614,7 +1623,8 @@ public sealed class CodexProcessService : IDisposable
                     imagePaths,
                     ideContextSummary,
                     attempt.IncludeExecutionOverrides,
-                    attempt.IncludeCollaborationMode);
+                    attempt.IncludeCollaborationMode,
+                    attempt.IncludeVerbosity);
                 return await SendRequestAsync("turn/start", requestParams, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1649,23 +1659,39 @@ public sealed class CodexProcessService : IDisposable
         };
     }
 
-    private static object? BuildCollaborationMode(CodexExtensionSettings settings)
+    private static JObject? BuildCollaborationMode(CodexExtensionSettings settings, bool includeVerbosity)
     {
         if (string.IsNullOrWhiteSpace(settings.DefaultModel))
         {
             return null;
         }
 
-        return new
+        var modeSettings = new JObject
         {
-            // Default must be sent explicitly, otherwise an existing thread can stay in Plan mode.
-            mode = settings.PlanModeEnabled ? "plan" : "default",
-            settings = new
-            {
-                model = settings.DefaultModel,
-                reasoning_effort = string.IsNullOrWhiteSpace(settings.ReasoningEffort) ? null : settings.ReasoningEffort
-            }
+            ["model"] = settings.DefaultModel
         };
+
+        AddIfNotBlank(modeSettings, "reasoning_effort", settings.ReasoningEffort);
+        if (includeVerbosity)
+        {
+            AddIfNotBlank(modeSettings, "verbosity", settings.ModelVerbosity);
+        }
+
+        // Default must be sent explicitly, otherwise an existing thread can stay in Plan mode.
+        return new JObject
+        {
+            ["mode"] = settings.PlanModeEnabled ? "plan" : "default",
+            ["settings"] = modeSettings
+        };
+    }
+
+    private static void AddIfNotBlank(JObject target, string propertyName, string? value)
+    {
+        value = (value ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            target[propertyName] = value;
+        }
     }
 
     private static object BuildSandboxPolicy(string sandboxMode)
@@ -3750,11 +3776,16 @@ public sealed class CodexProcessService : IDisposable
     private static string? NormalizeServiceTier(string? serviceTier)
     {
         var normalized = (serviceTier ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
         return normalized switch
         {
             "fast" => "fast",
             "flex" => "flex",
-            _ => null
+            _ => normalized
         };
     }
 

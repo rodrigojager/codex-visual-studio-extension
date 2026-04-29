@@ -14,6 +14,7 @@ Run Codex inside Visual Studio without leaving the IDE.
 - Reasoning effort selection
 - Verbosity selection
 - `approval_policy` and `sandbox_mode` controls
+- Manual model, reasoning, verbosity, and service-tier overrides through local settings
 - Solution folder as working directory
 - Local prompt history
 - Clipboard and file-based image attachments

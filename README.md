@@ -48,6 +48,21 @@ This means the extension does not force OpenAI login when your Codex CLI is alre
 - Theme support uses Visual Studio theme resources so the UI works in light and dark themes.
 - UI strings remain localized through the extension's existing localization pipeline.
 
+## Manual Future-Proofing
+
+The extension keeps its local settings in `%LOCALAPPDATA%\CodexVsix\settings.json`. If new Codex or provider capabilities appear before the extension is updated, users can open this file from the Codex settings UI or edit it directly.
+
+Useful fields:
+
+- `CustomModels`: extra model ids shown in the model selector.
+- `CustomReasoningEfforts`: extra reasoning effort values shown in the reasoning selector.
+- `CustomVerbosityOptions`: extra verbosity values shown in the verbosity selector.
+- `CustomServiceTiers`: extra service tier values shown in the speed selector.
+
+Manual option entries can be either a raw value, such as `"minimal"`, or a label/value pair, such as `"Very high|very_high"` or `"Very high=very_high"`.
+
+Provider and profile configuration should continue to live in `~/.codex/config.toml`; the extension starts the local Codex runtime and lets that runtime resolve provider-specific behavior.
+
 ## Build
 
 Release packaging uses full Visual Studio MSBuild.

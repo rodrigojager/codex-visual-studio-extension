@@ -248,6 +248,11 @@
                         <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" Text="{Binding CodexConfigPath}" TextTrimming="CharacterEllipsis" />
                         <Button DockPanel.Dock="Right" Margin="10,0,0,0" Style="{StaticResource CardButtonStyle}" Content="{Binding Localization.OpenConfigButton}" Command="{Binding OpenCodexConfigCommand}" />
                     </DockPanel>
+                    <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="Extension settings" />
+                    <DockPanel LastChildFill="False">
+                        <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" Text="{Binding ExtensionSettingsPath}" TextTrimming="CharacterEllipsis" />
+                        <Button DockPanel.Dock="Right" Margin="10,0,0,0" Style="{StaticResource CardButtonStyle}" Content="Open settings.json" Command="{Binding OpenExtensionSettingsCommand}" />
+                    </DockPanel>
                     <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.VerbosityLabel}" />
                     <ComboBox Style="{StaticResource PanelComboBoxStyle}" ItemsSource="{Binding VerbosityOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SelectedVerbosity, UpdateSourceTrigger=PropertyChanged}" />
                     <TextBlock Margin="0,12,0,4" Foreground="{StaticResource TextMutedBrush}" Text="{Binding Localization.ApprovalPolicyLabel}" />

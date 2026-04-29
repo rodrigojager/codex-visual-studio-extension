@@ -81,6 +81,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private bool _hasCompletedEnvironmentCheck;
     private bool _hasLoadedStartupSurfaces;
     private bool _isToolWindowStartupRefreshInProgress;
+    private bool _isRefreshingModels;
+    private string _modelRefreshStatus = string.Empty;
+    private string _customModelInput = string.Empty;
     private long _conversationStateVersion;
 
     public CodexToolWindowViewModel()
@@ -112,6 +115,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ClearOutputCommand = new DelegateCommand(() => Output = string.Empty);
         UseSolutionDirectoryCommand = new DelegateCommand(UseSolutionDirectory);
         OpenCodexConfigCommand = new DelegateCommand(OpenCodexConfig);
+        OpenExtensionSettingsCommand = new DelegateCommand(OpenExtensionSettings);
         OpenCodexSkillsFolderCommand = new DelegateCommand(OpenCodexSkillsFolder);
         OpenCodexDocsCommand = new DelegateCommand(OpenCodexDocs);
         OpenKeyboardShortcutsCommand = new DelegateCommand(OpenKeyboardShortcuts);
@@ -123,6 +127,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         RefreshIntegrationsCommand = new DelegateCommand(RefreshIntegrations);
         AddManagedMcpCommand = new DelegateCommand(AddManagedMcp);
         RemoveManagedMcpCommand = new DelegateCommand(RemoveManagedMcp);
+        RefreshModelsCommand = new DelegateCommand(RefreshModels, _ => !IsRefreshingModels);
+        AddCustomModelCommand = new DelegateCommand(AddCustomModel, _ => !string.IsNullOrWhiteSpace(CustomModelInput) || !string.IsNullOrWhiteSpace(SelectedModel));
+        RemoveCustomModelCommand = new DelegateCommand(RemoveCustomModel);
         CreateSkillCommand = new DelegateCommand(CreateSkill, _ => CanCreateSkill());
         PasteImageCommand = new DelegateCommand(PasteImageFromClipboard);
         AddImageFileCommand = new DelegateCommand(AddAttachment);
@@ -154,12 +161,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ResolveApprovalCommand = new DelegateCommand(ResolveApproval);
         ResolveUserInputCommand = new DelegateCommand(ResolveUserInput);
 
-        foreach (var option in CreateFallbackModelOptions())
-        {
-            ModelOptions.Add(option);
-        }
-
-        _selectedModel = EnsureOptionValue(_selectedModel, ModelOptions, ModelOptions.First().Value);
+        ReplaceModelOptions(MergeModelOptions(
+            Enumerable.Empty<SelectionOption>(),
+            CreateFallbackModelOptions(),
+            Settings.CustomModels,
+            _selectedModel));
 
         foreach (var item in GetRecentPromptHistory())
         {
@@ -218,16 +224,74 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public ObservableCollection<ChatMessage> Messages { get; } = new();
     public ObservableCollection<SelectionOption> ModelOptions { get; } = new();
 
-    public SelectionOption[] ReasoningOptions => _localization.CreateReasoningOptions();
+    public bool IsRefreshingModels
+    {
+        get => _isRefreshingModels;
+        private set
+        {
+            if (_isRefreshingModels == value)
+            {
+                return;
+            }
+
+            _isRefreshingModels = value;
+            OnPropertyChanged();
+            RefreshModelsCommand?.RaiseCanExecuteChanged();
+        }
+    }
+
+    public string ModelRefreshStatus
+    {
+        get => _modelRefreshStatus;
+        private set
+        {
+            value ??= string.Empty;
+            if (string.Equals(_modelRefreshStatus, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _modelRefreshStatus = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string CustomModelInput
+    {
+        get => _customModelInput;
+        set
+        {
+            value ??= string.Empty;
+            if (string.Equals(_customModelInput, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _customModelInput = value;
+            OnPropertyChanged();
+            AddCustomModelCommand?.RaiseCanExecuteChanged();
+        }
+    }
+
+    public SelectionOption[] ReasoningOptions => MergeConfigurableOptions(
+        _localization.CreateReasoningOptions(),
+        Settings.CustomReasoningEfforts,
+        SelectedReasoningEffort).ToArray();
 
     public SelectionOption[] ReasoningMenuOptions => new[]
     {
         new SelectionOption(_localization.ReasoningEffortLabel, "__label")
     }.Concat(ReasoningOptions).ToArray();
 
-    public SelectionOption[] VerbosityOptions => _localization.CreateVerbosityOptions();
+    public SelectionOption[] VerbosityOptions => MergeConfigurableOptions(
+        _localization.CreateVerbosityOptions(),
+        Settings.CustomVerbosityOptions,
+        SelectedVerbosity).ToArray();
 
-    public SelectionOption[] ServiceTierOptions => _localization.CreateServiceTierOptions();
+    public SelectionOption[] ServiceTierOptions => MergeConfigurableOptions(
+        _localization.CreateServiceTierOptions(),
+        Settings.CustomServiceTiers,
+        SelectedServiceTier).ToArray();
 
     public SelectionOption[] ApprovalPolicyOptions => _localization.CreateApprovalPolicyOptions();
 
@@ -247,6 +311,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public DelegateCommand ClearOutputCommand { get; }
     public DelegateCommand UseSolutionDirectoryCommand { get; }
     public DelegateCommand OpenCodexConfigCommand { get; }
+    public DelegateCommand OpenExtensionSettingsCommand { get; }
     public DelegateCommand OpenCodexSkillsFolderCommand { get; }
     public DelegateCommand OpenCodexDocsCommand { get; }
     public DelegateCommand OpenKeyboardShortcutsCommand { get; }
@@ -258,6 +323,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public DelegateCommand RefreshIntegrationsCommand { get; }
     public DelegateCommand AddManagedMcpCommand { get; }
     public DelegateCommand RemoveManagedMcpCommand { get; }
+    public DelegateCommand RefreshModelsCommand { get; }
+    public DelegateCommand AddCustomModelCommand { get; }
+    public DelegateCommand RemoveCustomModelCommand { get; }
     public DelegateCommand CreateSkillCommand { get; }
     public DelegateCommand PasteImageCommand { get; }
     public DelegateCommand AddImageFileCommand { get; }
@@ -618,6 +686,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     public string CodexConfigPath => _solutionContextService.GetCodexConfigPath();
 
+    public string ExtensionSettingsPath => _settingsStore.SettingsFilePath;
+
     public string CodexSkillsDirectory => _solutionContextService.GetCodexSkillsDirectory();
 
     public string SelectedSettingsSection
@@ -690,9 +760,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
             _selectedModel = value;
             Settings.DefaultModel = value;
+            EnsureSelectedModelOption(value);
             OnPropertyChanged();
             OnPropertyChanged(nameof(ProfileLabel));
             OnPropertyChanged(nameof(SelectedModelLabel));
+            AddCustomModelCommand?.RaiseCanExecuteChanged();
             SaveSettings();
         }
     }
@@ -711,6 +783,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             _selectedReasoningEffort = value;
             Settings.ReasoningEffort = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(ReasoningOptions));
+            OnPropertyChanged(nameof(ReasoningMenuOptions));
             OnPropertyChanged(nameof(SelectedReasoningEffortLabel));
             SaveSettings();
         }
@@ -721,7 +795,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         get => _selectedVerbosity;
         set
         {
-            value = EnsureOptionValue(value, VerbosityOptions, "medium");
+            value = EnsureKnownOrCustomOptionValue(value, VerbosityOptions, "medium");
             if (string.Equals(_selectedVerbosity, value, StringComparison.Ordinal))
             {
                 return;
@@ -730,6 +804,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             _selectedVerbosity = value;
             Settings.ModelVerbosity = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(VerbosityOptions));
             OnPropertyChanged(nameof(SelectedVerbosityLabel));
             SaveSettings();
         }
@@ -788,7 +863,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         get => Settings.ServiceTier;
         set
         {
-            value = EnsureOptionValue(value, ServiceTierOptions, string.Empty);
+            value = EnsureKnownOrCustomOptionValue(value, ServiceTierOptions, string.Empty);
             if (string.Equals(Settings.ServiceTier, value, StringComparison.Ordinal))
             {
                 return;
@@ -796,6 +871,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
             Settings.ServiceTier = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(ServiceTierOptions));
             OnPropertyChanged(nameof(SelectedServiceTierLabel));
             OnPropertyChanged(nameof(IsFastModeEnabled));
             SaveSettings();
@@ -1302,6 +1378,19 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        Settings.CustomModels = Settings.CustomModels
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Select(model => NormalizeModelValue(model))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        Settings.CustomReasoningEfforts = NormalizeManualOptionEntries(Settings.CustomReasoningEfforts)
+            .Select(NormalizeManualReasoningOptionEntry)
+            .Where(entry => !string.IsNullOrWhiteSpace(ParseManualSelectionOption(entry)?.Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        Settings.CustomVerbosityOptions = NormalizeManualOptionEntries(Settings.CustomVerbosityOptions);
+        Settings.CustomServiceTiers = NormalizeManualOptionEntries(Settings.CustomServiceTiers);
+        PersistSelectedModelIfCustom();
         Settings.DefaultModel = SelectedModel;
         Settings.ReasoningEffort = SelectedReasoningEffort;
         Settings.ModelVerbosity = SelectedVerbosity;
@@ -1524,10 +1613,15 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void NormalizeSelectionSettings()
     {
-        Settings.DefaultModel = EnsureOptionValue(NormalizeModelValue(Settings.DefaultModel), CreateFallbackModelOptions(), "gpt-5.4");
-        Settings.ReasoningEffort = EnsureOptionValue(NormalizeReasoningEffortValue(Settings.ReasoningEffort), ReasoningOptions, "high");
-        Settings.ModelVerbosity = EnsureOptionValue(Settings.ModelVerbosity, VerbosityOptions, "medium");
-        Settings.ServiceTier = EnsureOptionValue(Settings.ServiceTier, ServiceTierOptions, string.Empty);
+        Settings.DefaultModel = NormalizeModelValue(Settings.DefaultModel);
+        if (string.IsNullOrWhiteSpace(Settings.DefaultModel))
+        {
+            Settings.DefaultModel = "gpt-5.4";
+        }
+
+        Settings.ReasoningEffort = EnsureKnownOrCustomOptionValue(NormalizeReasoningEffortValue(Settings.ReasoningEffort), ReasoningOptions, "high");
+        Settings.ModelVerbosity = EnsureKnownOrCustomOptionValue(Settings.ModelVerbosity, VerbosityOptions, "medium");
+        Settings.ServiceTier = EnsureKnownOrCustomOptionValue(Settings.ServiceTier, ServiceTierOptions, string.Empty);
         Settings.SandboxMode = EnsureOptionValue(Settings.SandboxMode, SandboxModeOptions, "read-only");
         Settings.ApprovalPolicy = EnsureOptionValue(Settings.ApprovalPolicy, ApprovalPolicyOptions, string.Empty);
     }
@@ -1535,6 +1629,10 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private void EnsureSettingsCollectionsInitialized()
     {
         Settings.PromptHistory ??= new List<string>();
+        Settings.CustomModels ??= new List<string>();
+        Settings.CustomReasoningEfforts ??= new List<string>();
+        Settings.CustomVerbosityOptions ??= new List<string>();
+        Settings.CustomServiceTiers ??= new List<string>();
         Settings.ManagedMcpServers ??= new List<CodexManagedMcpServer>();
         Settings.PreferredMcpServers ??= new List<string>();
 
@@ -1542,6 +1640,21 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .Select(item => item.Trim())
             .ToList();
+
+        Settings.CustomModels = Settings.CustomModels
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Select(model => NormalizeModelValue(model))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Settings.CustomReasoningEfforts = NormalizeManualOptionEntries(Settings.CustomReasoningEfforts)
+            .Select(NormalizeManualReasoningOptionEntry)
+            .Where(entry => !string.IsNullOrWhiteSpace(ParseManualSelectionOption(entry)?.Value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Settings.CustomVerbosityOptions = NormalizeManualOptionEntries(Settings.CustomVerbosityOptions);
+        Settings.CustomServiceTiers = NormalizeManualOptionEntries(Settings.CustomServiceTiers);
 
         Settings.ManagedMcpServers = Settings.ManagedMcpServers
             .Where(server => server is not null)
@@ -1570,20 +1683,129 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         return options.FirstOrDefault()?.Value ?? fallbackValue;
     }
 
+    private static string EnsureKnownOrCustomOptionValue(string? currentValue, IEnumerable<SelectionOption> options, string fallbackValue)
+    {
+        var normalized = (currentValue ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            var knownValue = options.FirstOrDefault(option => string.Equals(option.Value, normalized, StringComparison.OrdinalIgnoreCase))?.Value;
+            return string.IsNullOrWhiteSpace(knownValue) ? normalized : knownValue!;
+        }
+
+        if (options.Any(option => string.Equals(option.Value, fallbackValue, StringComparison.Ordinal)))
+        {
+            return fallbackValue;
+        }
+
+        return options.FirstOrDefault()?.Value ?? fallbackValue;
+    }
+
+    private static IReadOnlyList<SelectionOption> MergeConfigurableOptions(
+        IEnumerable<SelectionOption> defaultOptions,
+        IEnumerable<string>? manualOptions,
+        string selectedValue)
+    {
+        var result = new List<SelectionOption>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddOption(SelectionOption? option)
+        {
+            if (option is null)
+            {
+                return;
+            }
+
+            var value = (option.Value ?? string.Empty).Trim();
+            if (!seen.Add(value))
+            {
+                return;
+            }
+
+            var label = string.IsNullOrWhiteSpace(option.Label) ? value : option.Label.Trim();
+            result.Add(new SelectionOption(label, value));
+        }
+
+        foreach (var option in defaultOptions ?? Enumerable.Empty<SelectionOption>())
+        {
+            AddOption(option);
+        }
+
+        foreach (var entry in manualOptions ?? Enumerable.Empty<string>())
+        {
+            AddOption(ParseManualSelectionOption(entry));
+        }
+
+        var selected = (selectedValue ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(selected))
+        {
+            AddOption(new SelectionOption(selected + " (custom)", selected));
+        }
+
+        return result;
+    }
+
+    private static List<string> NormalizeManualOptionEntries(IEnumerable<string>? entries)
+    {
+        return entries?
+            .Where(entry => !string.IsNullOrWhiteSpace(entry))
+            .Select(entry => entry.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+            ?? new List<string>();
+    }
+
+    private static string NormalizeManualReasoningOptionEntry(string entry)
+    {
+        var option = ParseManualSelectionOption(entry);
+        if (option is null)
+        {
+            return string.Empty;
+        }
+
+        var value = NormalizeReasoningEffortValue(option.Value);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return string.Equals(option.Label, option.Value, StringComparison.Ordinal)
+            ? value
+            : option.Label + "|" + value;
+    }
+
+    private static SelectionOption? ParseManualSelectionOption(string? entry)
+    {
+        var normalized = (entry ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        var separatorIndex = normalized.IndexOf('|');
+        if (separatorIndex < 0)
+        {
+            separatorIndex = normalized.IndexOf('=');
+        }
+
+        if (separatorIndex > 0 && separatorIndex < normalized.Length - 1)
+        {
+            var label = normalized.Substring(0, separatorIndex).Trim();
+            var value = normalized.Substring(separatorIndex + 1).Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return new SelectionOption(string.IsNullOrWhiteSpace(label) ? value : label, value);
+            }
+        }
+
+        return new SelectionOption(normalized, normalized);
+    }
+
     private static string NormalizeModelValue(string? value)
     {
         var normalized = (value ?? string.Empty).Trim();
-        switch (normalized.ToLowerInvariant())
-        {
-            case "gpt-5.4-codex":
-            case "gpt-5-codex":
-                return "gpt-5.4";
-            case "gpt-5.2 codex":
-            case "gpt-5.2-codex":
-                return "gpt-5.2-codex";
-            default:
-                return normalized;
-        }
+        return string.Equals(normalized, "gpt-5.2 codex", StringComparison.OrdinalIgnoreCase)
+            ? "gpt-5.2-codex"
+            : normalized;
     }
 
     private static string NormalizeReasoningEffortValue(string? value)
@@ -1594,7 +1816,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             case "minimum":
             case "min":
             case "minimal":
-                return "low";
+                return "minimal";
             case "maximum":
             case "max":
                 return "xhigh";
@@ -1622,10 +1844,10 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private static string GetOptionLabel(IEnumerable<SelectionOption> options, string? value, string fallbackLabel)
     {
         var normalized = (value ?? string.Empty).Trim();
-        var label = options.FirstOrDefault(option => string.Equals(option.Value, normalized, StringComparison.Ordinal))?.Label;
+        var label = options.FirstOrDefault(option => string.Equals(option.Value, normalized, StringComparison.OrdinalIgnoreCase))?.Label;
         if (!string.IsNullOrWhiteSpace(label))
         {
-            return label;
+            return label!;
         }
 
         return string.IsNullOrWhiteSpace(normalized) ? fallbackLabel : normalized;
@@ -1685,6 +1907,16 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
             _solutionContextService.OpenCodexConfig();
+        });
+    }
+
+    private void OpenExtensionSettings()
+    {
+        SaveSettings();
+        ThreadHelper.JoinableTaskFactory.Run(async delegate
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            _solutionContextService.OpenPath(_settingsStore.SettingsFilePath);
         });
     }
 
@@ -1777,6 +2009,51 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private void RefreshCodexStatus()
     {
         ThreadHelper.JoinableTaskFactory.RunAsync(RefreshCodexStatusAsync);
+    }
+
+    private void RefreshModels(object? _)
+    {
+        ThreadHelper.JoinableTaskFactory.RunAsync(() => RefreshModelOptionsAsync(force: true));
+    }
+
+    private void AddCustomModel(object? _)
+    {
+        var model = NormalizeModelValue(string.IsNullOrWhiteSpace(CustomModelInput) ? SelectedModel : CustomModelInput);
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return;
+        }
+
+        AddCustomModelToSettings(model);
+        SelectedModel = model;
+        CustomModelInput = string.Empty;
+        ReplaceModelOptions(MergeModelOptions(
+            ModelOptions,
+            CreateFallbackModelOptions(),
+            Settings.CustomModels,
+            SelectedModel));
+        ModelRefreshStatus = "Modelo personalizado adicionado.";
+        SaveSettings();
+    }
+
+    private void RemoveCustomModel(object? parameter)
+    {
+        var model = NormalizeModelValue(parameter as string);
+        if (string.IsNullOrWhiteSpace(model)
+            || string.Equals(model, SelectedModel, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        Settings.CustomModels = Settings.CustomModels
+            .Where(item => !string.Equals(item, model, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        ReplaceModelOptions(MergeModelOptions(
+            ModelOptions,
+            CreateFallbackModelOptions(),
+            Settings.CustomModels,
+            SelectedModel));
+        SaveSettings();
     }
 
     private void RunCodexLogin(object? _)
@@ -2287,37 +2564,229 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         });
     }
 
-    private async Task RefreshModelOptionsAsync()
+    private async Task RefreshModelOptionsAsync(bool force = false)
     {
-        if (!IsCodexReady)
+        if (IsRefreshingModels && !force)
         {
             return;
         }
 
+        RunOnUiThread(() =>
+        {
+            IsRefreshingModels = true;
+            ModelRefreshStatus = "Atualizando modelos...";
+        });
+
         try
         {
-            var models = await _codexProcessService.ListModelsAsync(Settings, CancellationToken.None).ConfigureAwait(false);
+            if (!IsCodexReady)
+            {
+                RunOnUiThread(() =>
+                {
+                    if (ModelOptions.Count == 0)
+                    {
+                        ReplaceModelOptions(MergeModelOptions(
+                            Enumerable.Empty<SelectionOption>(),
+                            CreateFallbackModelOptions(),
+                            Settings.CustomModels,
+                            SelectedModel));
+                    }
+
+                    ModelRefreshStatus = "Codex não está pronto. Mantendo modelos locais.";
+                });
+                return;
+            }
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var models = await _codexProcessService.ListModelsAsync(Settings, timeout.Token, Settings.IncludeHiddenModels).ConfigureAwait(false);
             if (models.Count == 0)
             {
+                RunOnUiThread(() =>
+                {
+                    if (ModelOptions.Count == 0)
+                    {
+                        ReplaceModelOptions(MergeModelOptions(
+                            Enumerable.Empty<SelectionOption>(),
+                            CreateFallbackModelOptions(),
+                            Settings.CustomModels,
+                            SelectedModel));
+                    }
+
+                    ModelRefreshStatus = "Nenhum modelo remoto retornado. Mantendo lista atual.";
+                });
                 return;
             }
 
             RunOnUiThread(() =>
             {
-                ModelOptions.Clear();
-                foreach (var model in models)
-                {
-                    ModelOptions.Add(model);
-                }
-
-                SelectedModel = EnsureOptionValue(SelectedModel, ModelOptions, ModelOptions[0].Value);
+                ReplaceModelOptions(MergeModelOptions(
+                    models,
+                    CreateFallbackModelOptions(),
+                    Settings.CustomModels,
+                    SelectedModel));
+                ModelRefreshStatus = "Modelos atualizados pelo Codex.";
                 OnPropertyChanged(nameof(SelectedModelLabel));
             });
         }
         catch (Exception ex)
         {
+            RunOnUiThread(() =>
+            {
+                if (ModelOptions.Count == 0)
+                {
+                    ReplaceModelOptions(MergeModelOptions(
+                        Enumerable.Empty<SelectionOption>(),
+                        CreateFallbackModelOptions(),
+                        Settings.CustomModels,
+                        SelectedModel));
+                }
+
+                ModelRefreshStatus = "Falha ao atualizar modelos. Mantendo lista atual.";
+            });
             AppendOutput(_localization.LoadModelsErrorPrefix + ex.Message + Environment.NewLine);
         }
+        finally
+        {
+            RunOnUiThread(() => IsRefreshingModels = false);
+        }
+    }
+
+    private static IReadOnlyList<SelectionOption> MergeModelOptions(
+        IEnumerable<SelectionOption> remoteModels,
+        IEnumerable<SelectionOption> fallbackModels,
+        IEnumerable<string> customModels,
+        string selectedModel)
+    {
+        var result = new List<SelectionOption>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var fallbackList = NormalizeOptions(fallbackModels).ToList();
+        var fallbackValues = new HashSet<string>(fallbackList.Select(option => option.Value), StringComparer.OrdinalIgnoreCase);
+        var selected = NormalizeModelValue(selectedModel);
+
+        void AddOption(string? label, string? value)
+        {
+            value = NormalizeModelValue(value);
+            if (!string.IsNullOrWhiteSpace(selected) && string.Equals(value, selected, StringComparison.OrdinalIgnoreCase))
+            {
+                value = selected;
+            }
+
+            if (string.IsNullOrWhiteSpace(value) || !seen.Add(value))
+            {
+                return;
+            }
+
+            label = string.IsNullOrWhiteSpace(label) ? value : label!.Trim();
+            result.Add(new SelectionOption(label, value));
+        }
+
+        foreach (var option in NormalizeOptions(remoteModels))
+        {
+            AddOption(option.Label, option.Value);
+        }
+
+        foreach (var model in customModels ?? Enumerable.Empty<string>())
+        {
+            var value = NormalizeModelValue(model);
+            if (string.IsNullOrWhiteSpace(value) || fallbackValues.Contains(value))
+            {
+                continue;
+            }
+
+            AddOption(value + " (custom)", value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(selected) && !fallbackValues.Contains(selected))
+        {
+            AddOption(selected + " (custom)", selected);
+        }
+
+        foreach (var option in fallbackList)
+        {
+            AddOption(option.Label, option.Value);
+        }
+
+        if (result.Count == 0)
+        {
+            foreach (var option in CreateFallbackModelOptions())
+            {
+                AddOption(option.Label, option.Value);
+            }
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<SelectionOption> NormalizeOptions(IEnumerable<SelectionOption>? options)
+    {
+        return options?
+            .Where(option => option is not null && !string.IsNullOrWhiteSpace(option.Value))
+            .Select(option =>
+            {
+                var value = NormalizeModelValue(option.Value);
+                var label = string.IsNullOrWhiteSpace(option.Label) ? value : option.Label.Trim();
+                return new SelectionOption(label, value);
+            })
+            .Where(option => !string.IsNullOrWhiteSpace(option.Value))
+            ?? Enumerable.Empty<SelectionOption>();
+    }
+
+    private void ReplaceModelOptions(IEnumerable<SelectionOption> options)
+    {
+        ModelOptions.Clear();
+        foreach (var option in options)
+        {
+            ModelOptions.Add(option);
+        }
+
+        EnsureSelectedModelOption(SelectedModel);
+        OnPropertyChanged(nameof(SelectedModelLabel));
+    }
+
+    private void EnsureSelectedModelOption(string? model)
+    {
+        var value = NormalizeModelValue(model);
+        if (string.IsNullOrWhiteSpace(value)
+            || ModelOptions.Any(option => string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        ModelOptions.Add(new SelectionOption(value + " (custom)", value));
+    }
+
+    private void AddCustomModelToSettings(string model)
+    {
+        model = NormalizeModelValue(model);
+        if (string.IsNullOrWhiteSpace(model)
+            || Settings.CustomModels.Any(item => string.Equals(item, model, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        Settings.CustomModels.Add(model);
+    }
+
+    private void PersistSelectedModelIfCustom()
+    {
+        var selected = NormalizeModelValue(SelectedModel);
+        if (string.IsNullOrWhiteSpace(selected))
+        {
+            return;
+        }
+
+        if (CreateFallbackModelOptions().Any(option => string.Equals(option.Value, selected, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var existingOption = ModelOptions.FirstOrDefault(option => string.Equals(option.Value, selected, StringComparison.OrdinalIgnoreCase));
+        if (existingOption is not null && !existingOption.Label.EndsWith(" (custom)", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        AddCustomModelToSettings(selected);
     }
 
     private async Task RefreshThreadsAsync(string? preferredThreadId = null)

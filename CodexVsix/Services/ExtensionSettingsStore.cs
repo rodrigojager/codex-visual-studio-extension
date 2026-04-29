@@ -13,6 +13,8 @@ public sealed class ExtensionSettingsStore
 
     private static readonly string SettingsFile = Path.Combine(SettingsDirectory, "settings.json");
 
+    public string SettingsFilePath => SettingsFile;
+
     public CodexExtensionSettings Load()
     {
         try
@@ -40,6 +42,10 @@ public sealed class ExtensionSettingsStore
             settings.RawTomlOverrides ??= "";
             settings.CurrentThreadId ??= "";
             settings.LastThreadWorkingDirectory ??= "";
+            settings.CustomModels ??= new();
+            settings.CustomReasoningEfforts ??= new();
+            settings.CustomVerbosityOptions ??= new();
+            settings.CustomServiceTiers ??= new();
             settings.ManagedMcpServers ??= new();
             settings.PreferredMcpServers ??= new();
             return settings;
