@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Vsix xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
   <Identifier Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61">
-    <Name>Codex for Visual Studio</Name>
+    <Name>Visual Codex Studio</Name>
     <Author>Rodrigo Jager</Author>
-    <Version>1.1.20</Version>
+    <Version>1.1.23</Version>
     <Description xml:space="preserve">Runs Codex inside a docked Visual Studio tool window with chat, approvals, image attachments, and solution-aware context.</Description>
     <Locale>en-US</Locale>
     <MoreInfo>https://github.com/rodrigojager/codex-visual-studio-extension</MoreInfo>

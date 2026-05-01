@@ -16,6 +16,8 @@
         <Icon guid="guidImages" id="bmpPic1" />
         <Strings>
           <ButtonText>Codex</ButtonText>
+          <CommandName>View.VisualCodexStudio</CommandName>
+          <LocCanonicalName>View.VisualCodexStudio</LocCanonicalName>
         </Strings>
       </Button>
     </Buttons>
@@ -24,6 +26,10 @@
       <Bitmap guid="guidImages" href="Resources\Images.png" usedList="bmpPic1" />
     </Bitmaps>
   </Commands>
+
+  <KeyBindings>
+    <KeyBinding guid="guidCodexCommandSet" id="ShowCodexToolWindowCommand" editor="guidVSStd97" key1="K" mod1="Control" key2="C" mod2="Control Alt" />
+  </KeyBindings>
 
   <Symbols>
     <GuidSymbol name="guidCodexPackage" value="{A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61}" />
