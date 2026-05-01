@@ -1,8 +1,8 @@
-# Codex for Visual Studio
+# Visual Codex Studio
 
 Run Codex inside Visual Studio without leaving the IDE.
 
-`Codex for Visual Studio` adds a docked Codex tool window to Visual Studio 2022 and 2026. It uses your local Codex CLI installation, keeps the conversation inside Visual Studio, and stays compatible with the active Visual Studio theme and the extension's current UI languages.
+`Visual Codex Studio` adds a docked Codex tool window to Visual Studio 2022 and 2026. It uses your local Codex CLI installation, keeps the conversation inside Visual Studio, and stays compatible with the active Visual Studio theme and the extension's current UI languages.
 
 ## Highlights
 
