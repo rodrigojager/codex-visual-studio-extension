@@ -21,9 +21,11 @@ public partial class CodexToolWindowControl : UserControl
 {
     private readonly CodexToolWindowViewModel _viewModel;
     private readonly List<FrameworkElement> _chatSelectableElements = new();
+    private readonly HashSet<ChatMessage> _subscribedChatMessages = new();
     private FrameworkElement? _selectionAnchorElement;
     private object? _selectionAnchorPosition;
     private bool _isSelectingAcrossBubbles;
+    private bool _chatScrollToEndScheduled;
     private UserInputPromptWindow? _userInputPromptWindow;
     private bool _suppressUserInputWindowClosedCancel;
 
@@ -51,6 +53,11 @@ public partial class CodexToolWindowControl : UserControl
 
         DataContext = _viewModel;
         _viewModel.Messages.CollectionChanged += OnMessagesCollectionChanged;
+        foreach (var message in _viewModel.Messages)
+        {
+            SubscribeMessage(message);
+        }
+
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -121,7 +128,7 @@ public partial class CodexToolWindowControl : UserControl
         {
             foreach (var item in e.OldItems.OfType<ChatMessage>())
             {
-                item.PropertyChanged -= OnMessagePropertyChanged;
+                UnsubscribeMessage(item);
             }
         }
 
@@ -129,16 +136,20 @@ public partial class CodexToolWindowControl : UserControl
         {
             foreach (var item in e.NewItems.OfType<ChatMessage>())
             {
-                item.PropertyChanged += OnMessagePropertyChanged;
+                SubscribeMessage(item);
             }
         }
 
         if (e.Action == NotifyCollectionChangedAction.Reset)
         {
+            foreach (var item in _subscribedChatMessages.ToList())
+            {
+                UnsubscribeMessage(item);
+            }
+
             foreach (var item in _viewModel.Messages)
             {
-                item.PropertyChanged -= OnMessagePropertyChanged;
-                item.PropertyChanged += OnMessagePropertyChanged;
+                SubscribeMessage(item);
             }
         }
 
@@ -162,12 +173,53 @@ public partial class CodexToolWindowControl : UserControl
 
     private void ScrollChatToEnd()
     {
-        _ = Dispatcher.InvokeAsync(() => ChatScrollViewer.ScrollToEnd());
+        if (_chatScrollToEndScheduled)
+        {
+            return;
+        }
+
+        _chatScrollToEndScheduled = true;
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            _chatScrollToEndScheduled = false;
+            if (_viewModel.Messages.Count == 0)
+            {
+                return;
+            }
+
+            ChatContentHost.ScrollIntoView(_viewModel.Messages[_viewModel.Messages.Count - 1]);
+        }, DispatcherPriority.Background);
+    }
+
+    private void SubscribeMessage(ChatMessage message)
+    {
+        if (_subscribedChatMessages.Add(message))
+        {
+            message.PropertyChanged += OnMessagePropertyChanged;
+        }
+    }
+
+    private void UnsubscribeMessage(ChatMessage message)
+    {
+        if (_subscribedChatMessages.Remove(message))
+        {
+            message.PropertyChanged -= OnMessagePropertyChanged;
+        }
     }
 
     private void OnMessagePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        ScrollChatToEnd();
+        if (sender is not ChatMessage message || !ReferenceEquals(message, _viewModel.Messages.LastOrDefault()))
+        {
+            return;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(ChatMessage.Text), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatMessage.DisplayText), StringComparison.Ordinal)
+            || string.Equals(e.PropertyName, nameof(ChatMessage.Detail), StringComparison.Ordinal))
+        {
+            ScrollChatToEnd();
+        }
     }
 
     private void OnChatTextBoxLoaded(object sender, RoutedEventArgs e)
@@ -398,9 +450,9 @@ public partial class CodexToolWindowControl : UserControl
             return;
         }
 
-        if (Mouse.Captured != ChatScrollViewer)
+        if (Mouse.Captured != ChatContentHost)
         {
-            Mouse.Capture(ChatScrollViewer, CaptureMode.SubTree);
+            Mouse.Capture(ChatContentHost, CaptureMode.SubTree);
         }
 
         ExtendSelectionAcrossBubbles(currentElement, e.GetPosition(currentElement));
@@ -411,7 +463,7 @@ public partial class CodexToolWindowControl : UserControl
         base.OnPreviewMouseLeftButtonUp(e);
 
         _isSelectingAcrossBubbles = false;
-        if (Mouse.Captured == ChatScrollViewer)
+        if (Mouse.Captured == ChatContentHost)
         {
             Mouse.Capture(null);
         }

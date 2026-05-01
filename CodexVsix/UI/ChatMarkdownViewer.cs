@@ -14,6 +14,11 @@ public sealed class ChatMarkdownViewer : RichTextBox
     private const double NaturalWidthPadding = 20d;
 
     private bool _isRenderingDocument;
+    private bool _pendingRender = true;
+    private string? _renderedMarkdownText;
+    private string? _renderedWorkspaceRoot;
+    private ICommand? _renderedLinkCommand;
+    private Brush? _renderedForeground;
 
     public static readonly DependencyProperty MarkdownTextProperty = DependencyProperty.Register(
         nameof(MarkdownText),
@@ -47,7 +52,7 @@ public sealed class ChatMarkdownViewer : RichTextBox
         VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         ContextMenuService.SetIsEnabled(this, true);
-        RenderDocument();
+        IsVisibleChanged += OnIsVisibleChanged;
     }
 
     public string MarkdownText
@@ -75,14 +80,14 @@ public sealed class ChatMarkdownViewer : RichTextBox
             return;
         }
 
-        viewer.RenderDocument();
+        viewer.RequestRender();
     }
 
     private static void OnRenderContextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is ChatMarkdownViewer viewer)
         {
-            viewer.RenderDocument();
+            viewer.RequestRender();
         }
     }
 
@@ -98,6 +103,14 @@ public sealed class ChatMarkdownViewer : RichTextBox
         if (e.Property == ForegroundProperty)
         {
             // Rebuild the FlowDocument so markdown brushes follow VS theme/foreground updates.
+            RequestRender();
+        }
+    }
+
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (IsVisible && _pendingRender)
+        {
             RenderDocument();
         }
     }
@@ -116,15 +129,46 @@ public sealed class ChatMarkdownViewer : RichTextBox
         return new Size(targetWidth, measured.Height);
     }
 
+    private void RequestRender()
+    {
+        _pendingRender = true;
+        if (IsVisible)
+        {
+            RenderDocument();
+        }
+    }
+
     private void RenderDocument()
     {
+        var markdown = MarkdownText ?? string.Empty;
+        var workspaceRoot = WorkspaceRoot ?? string.Empty;
+        if (!_pendingRender
+            && string.Equals(_renderedMarkdownText, markdown, StringComparison.Ordinal)
+            && string.Equals(_renderedWorkspaceRoot, workspaceRoot, StringComparison.Ordinal)
+            && ReferenceEquals(_renderedLinkCommand, LinkCommand)
+            && ReferenceEquals(_renderedForeground, Foreground))
+        {
+            return;
+        }
+
+        if (!IsVisible)
+        {
+            _pendingRender = true;
+            return;
+        }
+
         _isRenderingDocument = true;
         try
         {
             Document = MarkdownRenderer.CreateDocument(
-                MarkdownText ?? string.Empty,
+                markdown,
                 Foreground,
-                new MarkdownRenderOptions(LinkCommand, WorkspaceRoot));
+                new MarkdownRenderOptions(LinkCommand, workspaceRoot));
+            _renderedMarkdownText = markdown;
+            _renderedWorkspaceRoot = workspaceRoot;
+            _renderedLinkCommand = LinkCommand;
+            _renderedForeground = Foreground;
+            _pendingRender = false;
         }
         finally
         {

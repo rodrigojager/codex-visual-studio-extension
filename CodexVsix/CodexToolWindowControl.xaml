@@ -742,6 +742,158 @@
                            TextTrimming="CharacterEllipsis" />
             </StackPanel>
         </DataTemplate>
+
+        <DataTemplate x:Key="ThreadHistoryItemTemplate">
+            <Grid ToolTip="{Binding Title}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="56" />
+                    <ColumnDefinition Width="28" />
+                    <ColumnDefinition Width="28" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="ThreadTitleText"
+                           Grid.Column="0"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Text="{Binding Title}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBox x:Name="ThreadRenameTextBox"
+                         Grid.Column="0"
+                         Margin="0,-2,0,0"
+                         Style="{StaticResource PanelTextBoxStyle}"
+                         Text="{Binding DataContext.RenameThreadName, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="{Binding DataContext.Localization.RenameTopicPlaceholder, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                         Visibility="Collapsed">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Enter"
+                                    Command="{Binding DataContext.RenameThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}" />
+                        <KeyBinding Key="Escape"
+                                    Command="{Binding DataContext.CancelRenameThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}" />
+                    </TextBox.InputBindings>
+                </TextBox>
+                <TextBlock x:Name="ThreadSubtitleText"
+                           Grid.Row="1"
+                           Grid.Column="0"
+                           Margin="0,2,0,0"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           FontSize="11"
+                           Text="{Binding Subtitle}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.RowSpan="2"
+                           Grid.Column="1"
+                           Margin="12,0,0,0"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Top"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           FontSize="11"
+                           Text="{Binding UpdatedAtLabel}" />
+                <Button x:Name="ThreadEditButton"
+                        Grid.RowSpan="2"
+                        Grid.Column="2"
+                        Width="22"
+                        Height="22"
+                        Margin="6,0,0,0"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTip="{Binding DataContext.Localization.RenameTopicButton, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        Command="{Binding DataContext.BeginRenameThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                    <Viewbox Width="9" Height="9">
+                        <Path Data="{StaticResource EditIcon}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              Stretch="Uniform" />
+                    </Viewbox>
+                </Button>
+                <Button x:Name="ThreadDeleteButton"
+                        Grid.RowSpan="2"
+                        Grid.Column="3"
+                        Width="22"
+                        Height="22"
+                        Margin="6,0,0,0"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTip="{Binding DataContext.Localization.DeleteHistoryTooltip, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                    <Viewbox Width="9" Height="9">
+                        <Path Data="{StaticResource TrashIcon}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              Stretch="Uniform" />
+                    </Viewbox>
+                </Button>
+                <Button x:Name="ThreadSaveButton"
+                        Grid.RowSpan="2"
+                        Grid.Column="2"
+                        Width="22"
+                        Height="22"
+                        Margin="6,0,0,0"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTip="{Binding DataContext.Localization.RenameTopicButton, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        Visibility="Collapsed"
+                        Command="{Binding DataContext.RenameThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                    <Viewbox Width="9" Height="9">
+                        <Path Data="{StaticResource CheckIcon}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              Stretch="Uniform" />
+                    </Viewbox>
+                </Button>
+                <Button x:Name="ThreadCancelButton"
+                        Grid.RowSpan="2"
+                        Grid.Column="3"
+                        Width="22"
+                        Height="22"
+                        Margin="6,0,0,0"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTip="{Binding DataContext.Localization.CloseButton, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        Visibility="Collapsed"
+                        Command="{Binding DataContext.CancelRenameThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                    <Viewbox Width="9" Height="9">
+                        <Path Data="{StaticResource CloseIcon}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              Stretch="Uniform" />
+                    </Viewbox>
+                </Button>
+
+            </Grid>
+
+            <DataTemplate.Triggers>
+                    <DataTrigger Value="Visible">
+                        <DataTrigger.Binding>
+                            <MultiBinding Converter="{StaticResource StringsEqualToVisibilityConverter}">
+                                <Binding Path="ThreadId" />
+                                <Binding Path="DataContext.EditingThreadId" RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                            </MultiBinding>
+                        </DataTrigger.Binding>
+                        <Setter TargetName="ThreadTitleText" Property="Visibility" Value="Collapsed" />
+                        <Setter TargetName="ThreadRenameTextBox" Property="Visibility" Value="Visible" />
+                        <Setter TargetName="ThreadSubtitleText" Property="Visibility" Value="Collapsed" />
+                        <Setter TargetName="ThreadEditButton" Property="Visibility" Value="Collapsed" />
+                        <Setter TargetName="ThreadDeleteButton" Property="Visibility" Value="Collapsed" />
+                        <Setter TargetName="ThreadSaveButton" Property="Visibility" Value="Visible" />
+                        <Setter TargetName="ThreadCancelButton" Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid Background="{StaticResource WindowBrush}">
@@ -843,74 +995,9 @@
                                      Background="Transparent"
                                      BorderThickness="0"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                     Foreground="{StaticResource TextSecondaryBrush}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid ToolTip="{Binding Title}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="56" />
-                                                <ColumnDefinition Width="28" />
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <TextBlock Grid.Column="0"
-                                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding Title}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Grid.Row="1"
-                                                       Grid.Column="0"
-                                                       Margin="0,4,0,0"
-                                                       Foreground="{StaticResource TextMutedBrush}"
-                                                       FontSize="11"
-                                                       Text="{Binding Subtitle}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Grid.RowSpan="2"
-                                                       Grid.Column="1"
-                                                       Margin="12,0,0,0"
-                                                       HorizontalAlignment="Right"
-                                                       VerticalAlignment="Top"
-                                                       Foreground="{StaticResource TextMutedBrush}"
-                                                       FontSize="11"
-                                                       Text="{Binding UpdatedAtLabel}" />
-                                            <Button Grid.RowSpan="2"
-                                                    Grid.Column="2"
-                                                    Width="22"
-                                                    Height="22"
-                                                    Margin="6,0,0,0"
-                                                    Padding="0"
-                                                    HorizontalAlignment="Right"
-                                                    VerticalAlignment="Top"
-                                                    Style="{StaticResource IconButtonStyle}"
-                                                    ToolTip="{Binding DataContext.Localization.DeleteHistoryTooltip, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    CommandParameter="{Binding}">
-                                                <Viewbox Width="9" Height="9">
-                                                    <Path Data="{StaticResource TrashIcon}"
-                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                          Stretch="Uniform" />
-                                                </Viewbox>
-                                            </Button>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
+                                     Foreground="{StaticResource TextSecondaryBrush}"
+                                     ItemTemplate="{StaticResource ThreadHistoryItemTemplate}">
                             </ListBox>
-
-                            <StackPanel Grid.Row="2"
-                                        Margin="0,10,0,0"
-                                        Orientation="Horizontal">
-                                <TextBox Width="186"
-                                         Style="{StaticResource PanelTextBoxStyle}"
-                                         Text="{Binding RenameThreadName, UpdateSourceTrigger=PropertyChanged}"
-                                         ToolTip="{Binding Localization.RenameTopicPlaceholder}" />
-                                <Button Margin="8,0,0,0"
-                                        Style="{StaticResource MiniButtonStyle}"
-                                        Content="{Binding Localization.RenameTopicButton}"
-                                        Command="{Binding RenameThreadCommand}" />
-                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -1554,23 +1641,8 @@
                                      Background="Transparent"
                                      BorderThickness="0"
                                      Visibility="{Binding HasVisibleThreads, Converter={StaticResource BoolToVisibilityConverter}}"
-                                     ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <DockPanel LastChildFill="True">
-                                            <TextBlock DockPanel.Dock="Right"
-                                                       Margin="12,0,0,0"
-                                                       Foreground="{StaticResource TextMutedBrush}"
-                                                       FontSize="11"
-                                                       Text="{Binding UpdatedAtLabel}" />
-                                            <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
-                                                       FontSize="13"
-                                                       Text="{Binding Title}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </DockPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                     ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}"
+                                     ItemTemplate="{StaticResource ThreadHistoryItemTemplate}" />
                         </Grid>
                     </Grid>
                 </Border>
@@ -1914,7 +1986,8 @@
                                      Background="Transparent"
                                      BorderThickness="0"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                     ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}">
+                                     ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}"
+                                     ItemTemplate="{StaticResource ThreadHistoryItemTemplate}">
                                 <ListBox.Style>
                                     <Style TargetType="ListBox">
                                         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
@@ -1935,44 +2008,6 @@
                                         </Style.Triggers>
                                     </Style>
                                 </ListBox.Style>
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid ToolTip="{Binding Title}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="56" />
-                                                <ColumnDefinition Width="28" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0"
-                                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                                       FontSize="13"
-                                                       Text="{Binding Title}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Grid.Column="1"
-                                                       Margin="12,0,0,0"
-                                                       HorizontalAlignment="Right"
-                                                       VerticalAlignment="Center"
-                                                       Foreground="{StaticResource TextMutedBrush}"
-                                                       FontSize="11"
-                                                       Text="{Binding UpdatedAtLabel}" />
-                                            <Button Grid.Column="2"
-                                                    Width="22"
-                                                    Height="22"
-                                                    Margin="6,0,0,0"
-                                                    Padding="0"
-                                                    Style="{StaticResource IconButtonStyle}"
-                                                    ToolTip="{Binding DataContext.Localization.DeleteHistoryTooltip, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    CommandParameter="{Binding}">
-                                                <Viewbox Width="9" Height="9">
-                                                    <Path Data="{StaticResource TrashIcon}"
-                                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                          Stretch="Uniform" />
-                                                </Viewbox>
-                                            </Button>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
                             </ListBox>
 
                             <Button Grid.Row="2"
@@ -2107,18 +2142,53 @@
                     </Border>
                 </StackPanel>
 
-                <ScrollViewer x:Name="ChatScrollViewer"
-                              Grid.Row="1"
-                              Grid.Column="0"
-                              HorizontalScrollBarVisibility="Disabled"
-                              VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="ChatContentHost">
-                        <ItemsControl ItemsSource="{Binding Messages}">
-                            <ItemsControl.ItemTemplate>
+                <Grid Grid.Row="1"
+                      Grid.Column="0">
+                    <ListBox x:Name="ChatContentHost"
+                             ItemsSource="{Binding Messages}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Focusable="False"
+                             Padding="0"
+                             SelectionMode="Single"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.CanContentScroll="True"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.VirtualizationMode="Recycling"
+                             VirtualizingPanel.ScrollUnit="Pixel"
+                             VirtualizingPanel.CacheLength="2"
+                             VirtualizingPanel.CacheLengthUnit="Page">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Focusable" Value="False" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter Content="{TemplateBinding Content}"
+                                                              ContentStringFormat="{TemplateBinding ContentStringFormat}"
+                                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Width="{Binding RelativeSource={RelativeSource AncestorType=ScrollViewer}, Path=ActualWidth}">
+                                    <Grid Width="{Binding RelativeSource={RelativeSource AncestorType=ListBox}, Path=ActualWidth}">
                                     <Border x:Name="Bubble"
-                                            MaxWidth="{Binding RelativeSource={RelativeSource AncestorType=ScrollViewer}, Path=ActualWidth, Converter={StaticResource ChatBubbleWidthConverter}}"
+                                            MaxWidth="{Binding RelativeSource={RelativeSource AncestorType=ListBox}, Path=ActualWidth, Converter={StaticResource ChatBubbleWidthConverter}}"
                                             Margin="8,0,0,26"
                                             Padding="0"
                                             HorizontalAlignment="Left"
@@ -2350,16 +2420,19 @@
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
 
-                        <Border Margin="34,34,96,26"
+                    <Border Margin="34,34,96,26"
                                 Padding="14,12"
                                 HorizontalAlignment="Left"
+                                VerticalAlignment="Bottom"
                                 Background="{StaticResource EventCardBrush}"
                                 BorderBrush="{StaticResource EventCardBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="14"
+                                IsHitTestVisible="False"
+                                Panel.ZIndex="1"
                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
                             <StackPanel Orientation="Horizontal">
                                 <Ellipse Width="8"
@@ -2423,9 +2496,8 @@
                                     </Ellipse.Triggers>
                                 </Ellipse>
                             </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
+                    </Border>
+                </Grid>
 
                 <Border Grid.Row="2"
                         Grid.Column="0"
@@ -3037,63 +3109,8 @@
                                              Background="Transparent"
                                              BorderThickness="0"
                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                             ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}">
-                                        <ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <Grid ToolTip="{Binding Title}">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="56" />
-                                                        <ColumnDefinition Width="28" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="Auto" />
-                                                    </Grid.RowDefinitions>
-
-                                                    <TextBlock Grid.Column="0"
-                                                               Foreground="{StaticResource TextPrimaryBrush}"
-                                                               FontSize="13"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding Title}"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Grid.Row="1"
-                                                               Grid.Column="0"
-                                                               Margin="0,2,0,0"
-                                                               Foreground="{StaticResource TextMutedBrush}"
-                                                               FontSize="11"
-                                                               Text="{Binding Subtitle}"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Grid.RowSpan="2"
-                                                               Grid.Column="1"
-                                                               Margin="12,0,0,0"
-                                                               HorizontalAlignment="Right"
-                                                               VerticalAlignment="Top"
-                                                               Foreground="{StaticResource TextMutedBrush}"
-                                                               FontSize="11"
-                                                               Text="{Binding UpdatedAtLabel}" />
-                                                    <Button Grid.RowSpan="2"
-                                                            Grid.Column="2"
-                                                            Width="22"
-                                                            Height="22"
-                                                            Margin="6,0,0,0"
-                                                            Padding="0"
-                                                            HorizontalAlignment="Right"
-                                                            VerticalAlignment="Top"
-                                                            Style="{StaticResource IconButtonStyle}"
-                                                            ToolTip="{Binding DataContext.Localization.DeleteHistoryTooltip, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                            Command="{Binding DataContext.DeleteThreadCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                            CommandParameter="{Binding}">
-                                                        <Viewbox Width="9" Height="9">
-                                                            <Path Data="{StaticResource TrashIcon}"
-                                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                                  Stretch="Uniform" />
-                                                        </Viewbox>
-                                                    </Button>
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                             ItemContainerStyle="{StaticResource SidebarListBoxItemStyle}"
+                                             ItemTemplate="{StaticResource ThreadHistoryItemTemplate}" />
                                 </Grid>
                             </Border>
 
@@ -4092,13 +4109,22 @@
                                         CornerRadius="6"
                                         Background="{StaticResource ChipBrush}"
                                         ToolTip="{Binding ContextWindowDetail}">
-                                    <Path Data="{Binding ContextRingGeometry}"
-                                          Margin="2"
-                                          Stretch="Fill"
-                                          Stroke="{StaticResource SuccessBrush}"
-                                          StrokeThickness="1.5"
-                                          StrokeStartLineCap="Round"
-                                          StrokeEndLineCap="Round" />
+                                    <Viewbox Margin="2"
+                                             Stretch="Uniform">
+                                        <Grid Width="16"
+                                              Height="16">
+                                            <Ellipse Margin="1"
+                                                     Stroke="{StaticResource PanelBorderBrush}"
+                                                     StrokeThickness="1.5"
+                                                     Opacity="0.55" />
+                                            <Path Data="{Binding ContextRingGeometry}"
+                                                  Stretch="None"
+                                                  Stroke="{StaticResource SuccessBrush}"
+                                                  StrokeThickness="1.5"
+                                                  StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round" />
+                                        </Grid>
+                                    </Viewbox>
                                 </Border>
                                 <TextBlock VerticalAlignment="Center"
                                            Foreground="{StaticResource TextMutedBrush}"

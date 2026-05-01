@@ -7,6 +7,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,6 +26,7 @@ namespace CodexVsix.ViewModels;
 public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposable
 {
     private const double DefaultContextTokenBudget = 128000d;
+    private const int AssistantOutputFlushDelayMilliseconds = 75;
     private const string SettingsSectionAccount = "account";
     private const string SettingsSectionCodexMenu = "codex-menu";
     private const string SettingsSectionCodex = "codex";
@@ -38,11 +40,15 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private readonly CodexProcessService _codexProcessService = new();
     private readonly CodexEnvironmentService _codexEnvironmentService = new();
     private readonly SolutionContextService _solutionContextService = new();
+    private readonly object _assistantOutputSync = new();
+    private readonly StringBuilder _assistantOutputBuffer = new();
 
     private CancellationTokenSource? _cts;
     private ChatMessage? _currentAssistantMessage;
     private ChatMessage? _currentPlanMessage;
     private ChatMessage? _currentTransientStatusMessage;
+    private bool _assistantOutputFlushScheduled;
+    private long _assistantOutputBufferVersion;
     private bool _isBusy;
     private bool _isStopping;
     private bool _hideRecentTasksPreview;
@@ -70,6 +76,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     private CodexThreadSummary? _selectedThread;
     private bool _suppressThreadSelection;
     private string _renameThreadName = string.Empty;
+    private string _editingThreadId = string.Empty;
     private string _newSkillName = string.Empty;
     private string _newSkillDescription = string.Empty;
     private string _skillSearchText = string.Empty;
@@ -141,7 +148,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         ReuseHistoryPromptCommand = new DelegateCommand(ReuseHistoryPrompt, () => SelectedHistoryPrompt is not null);
         NewThreadCommand = new DelegateCommand(StartNewThread, () => IsCodexReady && !IsStopping);
         DismissRecentTasksPreviewCommand = new DelegateCommand(DismissRecentTasksPreview);
-        RenameThreadCommand = new DelegateCommand(RenameSelectedThread, () => !IsBusy && SelectedThread is not null && !string.IsNullOrWhiteSpace(RenameThreadName));
+        BeginRenameThreadCommand = new DelegateCommand(BeginRenameThread, parameter => !IsBusy && parameter is CodexThreadSummary);
+        RenameThreadCommand = new DelegateCommand(RenameSelectedThread, CanRenameThread);
+        CancelRenameThreadCommand = new DelegateCommand(CancelRenameThread, _ => !string.IsNullOrWhiteSpace(EditingThreadId));
         DeleteThreadCommand = new DelegateCommand(DeleteThread, parameter => !IsBusy && parameter is CodexThreadSummary);
         OpenHistoryPanelCommand = new DelegateCommand(OpenHistoryPanel);
         ToggleHistoryPanelCommand = new DelegateCommand(ToggleHistoryPanel);
@@ -199,6 +208,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _userInputDecisionTcs?.TrySetResult(new JObject { ["answers"] = new JObject() });
         _cts?.Cancel();
         _cts?.Dispose();
+        ClearPendingAssistantOutput();
         ManagedMcpServers.CollectionChanged -= HandleManagedMcpServersChanged;
         Skills.CollectionChanged -= HandleSkillsChanged;
         McpServers.CollectionChanged -= HandleMcpServersChanged;
@@ -222,7 +232,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public ObservableCollection<CodexSkillSummary> Skills { get; } = new();
     public ObservableCollection<CodexRemoteSkillSummary> RemoteSkills { get; } = new();
     public ObservableCollection<CodexSkillSummary> DetectedPromptSkills { get; } = new();
-    public ObservableCollection<ChatMessage> Messages { get; } = new();
+    public ObservableRangeCollection<ChatMessage> Messages { get; } = new();
     public ObservableCollection<SelectionOption> ModelOptions { get; } = new();
 
     public bool IsRefreshingModels
@@ -338,7 +348,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     public DelegateCommand ReuseHistoryPromptCommand { get; }
     public DelegateCommand NewThreadCommand { get; }
     public DelegateCommand DismissRecentTasksPreviewCommand { get; }
+    public DelegateCommand BeginRenameThreadCommand { get; }
     public DelegateCommand RenameThreadCommand { get; }
+    public DelegateCommand CancelRenameThreadCommand { get; }
     public DelegateCommand DeleteThreadCommand { get; }
     public DelegateCommand OpenHistoryPanelCommand { get; }
     public DelegateCommand ToggleHistoryPanelCommand { get; }
@@ -396,7 +408,9 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             SendCommand.RaiseCanExecuteChanged();
             CancelCommand.RaiseCanExecuteChanged();
             NewThreadCommand.RaiseCanExecuteChanged();
+            BeginRenameThreadCommand.RaiseCanExecuteChanged();
             RenameThreadCommand.RaiseCanExecuteChanged();
+            CancelRenameThreadCommand.RaiseCanExecuteChanged();
             DeleteThreadCommand.RaiseCanExecuteChanged();
         }
     }
@@ -1095,9 +1109,15 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             }
 
             _selectedThread = value;
-            RenameThreadName = value?.Title ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(EditingThreadId))
+            {
+                RenameThreadName = value?.Title ?? string.Empty;
+            }
+
             OnPropertyChanged();
+            BeginRenameThreadCommand?.RaiseCanExecuteChanged();
             RenameThreadCommand?.RaiseCanExecuteChanged();
+            CancelRenameThreadCommand?.RaiseCanExecuteChanged();
             DeleteThreadCommand?.RaiseCanExecuteChanged();
 
             if (!_suppressThreadSelection && value is not null)
@@ -1115,6 +1135,25 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             _renameThreadName = value;
             OnPropertyChanged();
             RenameThreadCommand?.RaiseCanExecuteChanged();
+        }
+    }
+
+    public string EditingThreadId
+    {
+        get => _editingThreadId;
+        private set
+        {
+            value ??= string.Empty;
+            if (string.Equals(_editingThreadId, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _editingThreadId = value;
+            OnPropertyChanged();
+            BeginRenameThreadCommand?.RaiseCanExecuteChanged();
+            RenameThreadCommand?.RaiseCanExecuteChanged();
+            CancelRenameThreadCommand?.RaiseCanExecuteChanged();
         }
     }
 
@@ -1233,7 +1272,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 {
                     if (IsConversationStateCurrent(conversationStateVersion))
                     {
-                        AppendAssistantOutput(text);
+                        AppendAssistantOutput(text, conversationStateVersion);
                     }
                 },
                 onError: text =>
@@ -1258,6 +1297,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                     }
                 },
                 cancellationToken: _cts.Token);
+
+            await FlushPendingAssistantOutputAsync().ConfigureAwait(false);
 
             if (!IsConversationStateCurrent(conversationStateVersion))
             {
@@ -1295,6 +1336,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
         finally
         {
+            await FlushPendingAssistantOutputAsync().ConfigureAwait(false);
+
             if (IsConversationStateCurrent(conversationStateVersion))
             {
                 ClearTransientStatusMessage();
@@ -1582,6 +1625,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             _suppressThreadSelection = true;
             SelectedThread = null;
             _suppressThreadSelection = false;
+            EditingThreadId = string.Empty;
             RenameThreadName = string.Empty;
             Messages.Clear();
             Output = string.Empty;
@@ -3082,6 +3126,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             RunOnUiThread(() =>
             {
                 var selectedThreadId = preferredThreadId ?? SelectedThread?.ThreadId ?? Settings.CurrentThreadId;
+                var editingThreadId = EditingThreadId;
                 Threads.Clear();
                 foreach (var thread in threads)
                 {
@@ -3091,6 +3136,13 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 _suppressThreadSelection = true;
                 SelectedThread = Threads.FirstOrDefault(thread => string.Equals(thread.ThreadId, selectedThreadId, StringComparison.Ordinal));
                 _suppressThreadSelection = false;
+
+                if (!string.IsNullOrWhiteSpace(editingThreadId)
+                    && !Threads.Any(thread => string.Equals(thread.ThreadId, editingThreadId, StringComparison.Ordinal)))
+                {
+                    EditingThreadId = string.Empty;
+                    RenameThreadName = SelectedThread?.Title ?? string.Empty;
+                }
             });
         }
         catch (Exception ex)
@@ -3209,11 +3261,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
             {
                 _currentAssistantMessage = null;
                 _currentPlanMessage = null;
-                Messages.Clear();
-                foreach (var message in conversation.Messages)
-                {
-                    Messages.Add(CreateDisplayMessage(message));
-                }
+                Messages.ReplaceAll(conversation.Messages.Select(CreateDisplayMessage));
 
                 Output = string.Empty;
                 CloseSidebar();
@@ -3292,10 +3340,28 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         OnPropertyChanged(nameof(IsHistoryViewSelected));
     }
 
-    private void RenameSelectedThread()
+    private void BeginRenameThread(object? parameter)
     {
-        var selectedThread = SelectedThread;
-        var newName = RenameThreadName;
+        if (parameter is not CodexThreadSummary thread)
+        {
+            return;
+        }
+
+        EditingThreadId = thread.ThreadId;
+        RenameThreadName = thread.Title;
+    }
+
+    private bool CanRenameThread(object? parameter)
+    {
+        return !IsBusy
+            && !string.IsNullOrWhiteSpace(RenameThreadName)
+            && ResolveThreadForRename(parameter) is not null;
+    }
+
+    private void RenameSelectedThread(object? parameter)
+    {
+        var selectedThread = ResolveThreadForRename(parameter);
+        var newName = RenameThreadName?.Trim();
         if (selectedThread is null || string.IsNullOrWhiteSpace(newName))
         {
             return;
@@ -3305,14 +3371,52 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             try
             {
-                await _codexProcessService.RenameThreadAsync(Settings, selectedThread.ThreadId, newName, CancellationToken.None).ConfigureAwait(false);
+                await _codexProcessService.RenameThreadAsync(Settings, selectedThread.ThreadId, newName!, CancellationToken.None).ConfigureAwait(false);
                 await RefreshThreadsAsync(selectedThread.ThreadId).ConfigureAwait(false);
+                RunOnUiThread(() =>
+                {
+                    EditingThreadId = string.Empty;
+                    RenameThreadName = SelectedThread?.Title ?? string.Empty;
+                });
             }
             catch (Exception ex)
             {
                 AppendOutput(_localization.LoadTopicsErrorPrefix + ex.Message + Environment.NewLine);
             }
         });
+    }
+
+    private void CancelRenameThread(object? parameter)
+    {
+        var editingThreadId = EditingThreadId;
+        if (string.IsNullOrWhiteSpace(editingThreadId))
+        {
+            return;
+        }
+
+        if (parameter is CodexThreadSummary thread
+            && !string.Equals(thread.ThreadId, editingThreadId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        EditingThreadId = string.Empty;
+        RenameThreadName = SelectedThread?.Title ?? string.Empty;
+    }
+
+    private CodexThreadSummary? ResolveThreadForRename(object? parameter)
+    {
+        if (parameter is CodexThreadSummary thread)
+        {
+            return thread;
+        }
+
+        if (!string.IsNullOrWhiteSpace(EditingThreadId))
+        {
+            return Threads.FirstOrDefault(threadSummary => string.Equals(threadSummary.ThreadId, EditingThreadId, StringComparison.Ordinal));
+        }
+
+        return SelectedThread;
     }
 
     private void DeleteThread(object? parameter)
@@ -3341,6 +3445,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                         _suppressThreadSelection = true;
                         SelectedThread = null;
                         _suppressThreadSelection = false;
+                        EditingThreadId = string.Empty;
                         RenameThreadName = string.Empty;
                         Messages.Clear();
                         Output = string.Empty;
@@ -3796,21 +3901,95 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         });
     }
 
-    private void AppendAssistantOutput(string text)
+    private void AppendAssistantOutput(string text, long conversationStateVersion)
     {
         var chunk = text.Replace("\r", string.Empty);
-
-        Application.Current.Dispatcher.Invoke(() =>
+        if (string.IsNullOrEmpty(chunk))
         {
-            ClearTransientStatusMessage();
-            if (_currentAssistantMessage is null)
+            return;
+        }
+
+        var shouldScheduleFlush = false;
+        lock (_assistantOutputSync)
+        {
+            if (_assistantOutputBufferVersion != conversationStateVersion)
             {
-                _currentAssistantMessage = CreateDisplayMessage(false, string.Empty);
-                Messages.Add(_currentAssistantMessage);
+                _assistantOutputBuffer.Clear();
+                _assistantOutputBufferVersion = conversationStateVersion;
             }
 
-            _currentAssistantMessage.Text += chunk;
+            _assistantOutputBuffer.Append(chunk);
+            if (!_assistantOutputFlushScheduled)
+            {
+                _assistantOutputFlushScheduled = true;
+                shouldScheduleFlush = true;
+            }
+        }
+
+        if (!shouldScheduleFlush)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(AssistantOutputFlushDelayMilliseconds).ConfigureAwait(false);
+            await FlushPendingAssistantOutputAsync().ConfigureAwait(false);
         });
+    }
+
+    private Task FlushPendingAssistantOutputAsync()
+    {
+        var dispatcher = Application.Current.Dispatcher;
+        if (dispatcher.CheckAccess())
+        {
+            FlushPendingAssistantOutput();
+            return Task.CompletedTask;
+        }
+
+        return dispatcher.InvokeAsync(FlushPendingAssistantOutput, System.Windows.Threading.DispatcherPriority.Background).Task;
+    }
+
+    private void FlushPendingAssistantOutput()
+    {
+        string chunk;
+        long conversationStateVersion;
+        lock (_assistantOutputSync)
+        {
+            chunk = _assistantOutputBuffer.ToString();
+            conversationStateVersion = _assistantOutputBufferVersion;
+            _assistantOutputBuffer.Clear();
+            _assistantOutputFlushScheduled = false;
+        }
+
+        if (string.IsNullOrEmpty(chunk) || !IsConversationStateCurrent(conversationStateVersion))
+        {
+            return;
+        }
+
+        ClearTransientStatusMessage();
+        if (_currentAssistantMessage is null)
+        {
+            _currentAssistantMessage = CreateDisplayMessage(false, string.Empty);
+            Messages.Add(_currentAssistantMessage);
+        }
+
+        _currentAssistantMessage.Text += chunk;
+    }
+
+    private void ClearPendingAssistantOutput()
+    {
+        lock (_assistantOutputSync)
+        {
+            if (_assistantOutputBuffer.Length == 0)
+            {
+                _assistantOutputFlushScheduled = false;
+                return;
+            }
+
+            _assistantOutputBuffer.Clear();
+            _assistantOutputFlushScheduled = false;
+        }
     }
 
     private void AppendStderr(string text)
@@ -4317,6 +4496,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private long BeginConversationStateChange()
     {
+        ClearPendingAssistantOutput();
         return Interlocked.Increment(ref _conversationStateVersion);
     }
 

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <Metadata>
-    <Identity Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61" Version="1.1.23" Language="en-US" Publisher="Rodrigo Jager" />
+    <Identity Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61" Version="1.2.0" Language="en-US" Publisher="Rodrigo Jager" />
     <DisplayName>Visual Codex Studio</DisplayName>
     <Description xml:space="preserve">Runs Codex inside a docked Visual Studio tool window with chat, approvals, image attachments, and solution-aware context.</Description>
     <MoreInfo>https://github.com/rodrigojager/codex-visual-studio-extension</MoreInfo>
