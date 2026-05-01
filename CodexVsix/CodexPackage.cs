@@ -7,7 +7,7 @@ using Microsoft.VisualStudio.Shell;
 namespace CodexVsix;
 
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-[InstalledProductRegistration("Visual Codex Studio", "Tool window integration for Codex", "1.1.22")]
+[InstalledProductRegistration("Visual Codex Studio", "Tool window integration for Codex", "1.2.0")]
 [ProvideMenuResource("Menus.ctmenu", 1)]
 [ProvideToolWindow(typeof(CodexToolWindow))]
 [ProvideToolWindow(typeof(CodexSettingsToolWindow))]
