@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 - 2026-05-01
+
+### Changed
+- Updated the VSIX manifests shipped with the extension package.
+- Refreshed the packaged extension metadata so the published release carries the new manifest content.
+
 ## 1.2.0 - 2026-05-01
 
 ### Added
