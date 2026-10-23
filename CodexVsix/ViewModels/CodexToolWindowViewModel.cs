@@ -132,6 +132,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         _selectedModel = Settings.DefaultModel;
         _selectedReasoningEffort = Settings.ReasoningEffort;
         _selectedVerbosity = Settings.ModelVerbosity;
+        _codexProcessService.MissingExecutableHandler = CodexCliInstaller.EnsureInstalledAsync;
         _codexProcessService.ApprovalRequestHandler = HandleApprovalRequestAsync;
         _codexProcessService.UserInputRequestHandler = HandleUserInputRequestAsync;
         _codexProcessService.ThreadCatalogChanged += HandleThreadCatalogChanged;
@@ -212,6 +213,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
 
         ManagedMcpServers.CollectionChanged += HandleManagedMcpServersChanged;
+        AttachedImages.CollectionChanged += HandleAttachedImagesChanged;
         Skills.CollectionChanged += HandleSkillsChanged;
         McpServers.CollectionChanged += HandleMcpServersChanged;
         Threads.CollectionChanged += HandleThreadsChanged;
@@ -251,6 +253,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         }
         ClearPendingAssistantOutput();
         ManagedMcpServers.CollectionChanged -= HandleManagedMcpServersChanged;
+        AttachedImages.CollectionChanged -= HandleAttachedImagesChanged;
         Skills.CollectionChanged -= HandleSkillsChanged;
         McpServers.CollectionChanged -= HandleMcpServersChanged;
         Threads.CollectionChanged -= HandleThreadsChanged;
@@ -1441,7 +1444,7 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         var promptToSend = queuedSubmission?.Prompt ?? BuildEffectivePrompt();
         var submission = queuedSubmission ?? CaptureComposerSubmission(promptToSend);
-        if (string.IsNullOrWhiteSpace(promptToSend))
+        if (string.IsNullOrWhiteSpace(promptToSend) && submission.ImagePaths.Count == 0)
         {
             return;
         }
@@ -1636,7 +1639,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private bool CanSubmitPrompt()
     {
-        if (!IsCodexReady || string.IsNullOrWhiteSpace(BuildEffectivePrompt()))
+        // An image is a valid prompt input by itself. Requiring text here makes
+        // pasted/file attachments impossible to submit unless the user adds
+        // unrelated text, and leaves the attachment path out of the turn.
+        if (!IsCodexReady
+            || (string.IsNullOrWhiteSpace(BuildEffectivePrompt()) && AttachedImages.Count == 0))
         {
             return false;
         }
@@ -1772,7 +1779,8 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
                 : _pendingFollowUpPrompts.Dequeue();
         }
 
-        if (nextSubmission is null || string.IsNullOrWhiteSpace(nextSubmission.Prompt))
+        if (nextSubmission is null
+            || (string.IsNullOrWhiteSpace(nextSubmission.Prompt) && nextSubmission.ImagePaths.Count == 0))
         {
             return;
         }
@@ -1937,36 +1945,47 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
 
     private void AddAttachment()
     {
-        var dialog = new OpenFileDialog
+        try
         {
-            Filter = _localization.AllFilesFilter,
-            Multiselect = true
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        foreach (var fileName in dialog.FileNames)
-        {
-            if (IsImageFile(fileName))
+            var dialog = new OpenFileDialog
             {
-                var info = new FileInfo(fileName);
-                if (info.Exists && info.Length <= 50L * 1024L * 1024L
-                    && !AttachedImages.Contains(fileName, StringComparer.OrdinalIgnoreCase))
+                Filter = _localization.AllFilesFilter,
+                Multiselect = true
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            foreach (var fileName in dialog.FileNames)
+            {
+                if (IsImageFile(fileName))
                 {
-                    AttachedImages.Add(fileName);
-                    SelectedImagePath = fileName;
+                    if (!AttachedImages.Contains(fileName, StringComparer.OrdinalIgnoreCase))
+                    {
+                        CodexImageInputInliner.CreateInlineImage(fileName);
+                        AttachedImages.Add(fileName);
+                        SelectedImagePath = fileName;
+                    }
+                }
+                else
+                {
+                    AppendFileReferenceToPrompt(fileName);
                 }
             }
-            else
-            {
-                AppendFileReferenceToPrompt(fileName);
-            }
-        }
 
-        UpdateContextEstimate();
+            UpdateContextEstimate();
+        }
+        catch (Exception ex)
+        {
+            AppendOutput("[image] could not attach the selected file: " + ex.Message + Environment.NewLine);
+            MessageBox.Show(
+                ex.Message,
+                "Image upload failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void RemoveSelectedImage()
@@ -4243,6 +4262,11 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
         OnPropertyChanged(nameof(HasManagedMcpServers));
     }
 
+    private void HandleAttachedImagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SendCommand.RaiseCanExecuteChanged();
+    }
+
     private void HandleRateLimitsUpdated(CodexRateLimitSummary summary)
     {
         RunOnUiThread(() => RateLimitSummary = summary);
@@ -5108,12 +5132,31 @@ public sealed class CodexToolWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         var directory = Path.Combine(Path.GetTempPath(), "CodexVsixImages");
         Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, $"clipboard_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
+        // Clipboard images can be pasted repeatedly within the same millisecond.
+        // A unique name prevents a later paste from replacing an image that is
+        // already queued for submission.
+        var path = Path.Combine(directory, $"clipboard_{Guid.NewGuid():N}.png");
+
+        if (bitmapSource.CanFreeze)
+        {
+            bitmapSource.Freeze();
+        }
 
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmapSource));
         using var stream = File.Create(path);
         encoder.Save(stream);
+
+        // Do not put an incomplete clipboard export into the composer. WPF can
+        // expose a clipboard bitmap whose backing data is no longer available;
+        // force a read while the source is still in scope so the user gets an
+        // error at paste time instead of an unreadable image at turn time.
+        stream.Flush(true);
+        if (stream.Length == 0)
+        {
+            throw new InvalidDataException("The clipboard image could not be encoded.");
+        }
+
         return path;
     }
 

@@ -77,6 +77,7 @@ public sealed class CodexProcessService : IDisposable
     public Func<CodexApprovalRequest, Task<JToken?>>? ApprovalRequestHandler { get; set; }
     public Func<CodexUserInputRequest, Task<JObject?>>? UserInputRequestHandler { get; set; }
     internal Func<JObject, Task<JObject?>>? AppServerRequestHandler { get; set; }
+    internal Func<CodexExtensionSettings, bool, CancellationToken, Task<bool>>? MissingExecutableHandler { get; set; }
     public event Action<string, JToken?>? AppServerNotificationReceived;
     public event Action? ThreadCatalogChanged;
     public event Action<CodexRateLimitSummary>? RateLimitsUpdated;
@@ -115,6 +116,19 @@ public sealed class CodexProcessService : IDisposable
         }
 
         var workingDirectory = ResolveWorkingDirectory(settings.WorkingDirectory);
+        if (string.Equals(method, "account/read", StringComparison.Ordinal)
+            && MissingExecutableHandler is not null
+            && await IsExecutableMissingAsync(settings, cancellationToken).ConfigureAwait(false))
+        {
+            // Lets the webview render its sign-in page; the install prompt fires when the user starts sign-in.
+            return new JObject { ["account"] = JValue.CreateNull(), ["requiresOpenaiAuth"] = true };
+        }
+
+        if (string.Equals(method, "account/login/start", StringComparison.Ordinal))
+        {
+            await EnsureExecutableAvailableAsync(settings, userInitiated: true, cancellationToken).ConfigureAwait(false);
+        }
+
         await EnsureServerReadyAsync(settings, workingDirectory, cancellationToken).ConfigureAwait(false);
         if (string.Equals(method, "account/read", StringComparison.Ordinal))
         {
@@ -130,6 +144,9 @@ public sealed class CodexProcessService : IDisposable
                 parameters, cancellationToken).ConfigureAwait(false);
         }
 
+        var inputDirectory = (parameters as JObject)?["cwd"]?.Value<string>();
+        parameters = CodexImageInputInliner.InlineImages(method, parameters,
+            string.IsNullOrWhiteSpace(inputDirectory) ? workingDirectory : ResolveWorkingDirectory(inputDirectory!));
         return await SendRequestAsync(method, parameters, cancellationToken).ConfigureAwait(false);
     }
 
@@ -933,6 +950,7 @@ public sealed class CodexProcessService : IDisposable
 
             try
             {
+                await EnsureExecutableAvailableAsync(settings, userInitiated: false, cancellationToken).ConfigureAwait(false);
                 StartServerProcess(settings, workingDirectory);
                 await InitializeServerAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -1075,6 +1093,36 @@ public sealed class CodexProcessService : IDisposable
                 _skillsByName.Clear();
                 _skillsCacheKey = workingDirectory;
             }
+        }
+    }
+
+    private static Task<bool> IsExecutableMissingAsync(CodexExtensionSettings settings, CancellationToken cancellationToken)
+    {
+        return Task.Run(
+            () => string.IsNullOrWhiteSpace(CodexExecutableResolver.ResolveExecutableLocation(settings.CodexExecutablePath, settings.EnvironmentVariables)),
+            cancellationToken);
+    }
+
+    private async Task EnsureExecutableAvailableAsync(CodexExtensionSettings settings, bool userInitiated, CancellationToken cancellationToken)
+    {
+        var handler = MissingExecutableHandler;
+        if (handler is null)
+        {
+            return;
+        }
+
+        var resolved = await Task.Run(
+            () => CodexExecutableResolver.ResolveExecutableLocation(settings.CodexExecutablePath, settings.EnvironmentVariables),
+            cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(resolved))
+        {
+            return;
+        }
+
+        _diagnostics.Write("appserver.executable.missing", new JObject { ["configured"] = settings.CodexExecutablePath });
+        if (!await handler(settings, userInitiated, cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("Codex CLI not found. Install it with: " + CodexEnvironmentService.FallbackInstallCommand);
         }
     }
 
@@ -2075,6 +2123,23 @@ public sealed class CodexProcessService : IDisposable
         }
 
         var json = NewtonsoftJsonCompatibility.Serialize(message, Formatting.None);
+        if (string.Equals(message["method"]?.Value<string>(), "turn/start", StringComparison.Ordinal))
+        {
+            var inputs = message["params"]?["input"] as JArray;
+            _diagnostics.Write(
+                "appserver.turn.start.inputSummary",
+                new JObject
+                {
+                    ["inputCount"] = inputs?.Count ?? 0,
+                    ["textCount"] = inputs?.Count(item => item?["type"]?.Value<string>() == "text") ?? 0,
+                    ["imageCount"] = inputs?.Count(item => item?["type"]?.Value<string>() == "image") ?? 0,
+                    ["localImageCount"] = inputs?.Count(item => item?["type"]?.Value<string>() == "localImage") ?? 0,
+                    ["inlineImageDataLength"] = inputs?
+                        .Where(item => item?["type"]?.Value<string>() == "image")
+                        .Sum(item => item?["url"]?.Value<string>()?.Length ?? 0) ?? 0
+                });
+        }
+
         lock (_writeLock)
         {
             writer.WriteLine(json);
@@ -2397,14 +2462,12 @@ public sealed class CodexProcessService : IDisposable
 
         foreach (var imagePath in imagePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            inputs.Add(new
-            {
-                type = "localImage",
-                path = Path.GetFullPath(imagePath)
-            });
+            inputs.Add(new { type = "localImage", path = Path.GetFullPath(imagePath) });
         }
 
-        return inputs.ToArray();
+        var normalized = (JObject)CodexImageInputInliner.InlineImages("turn/start",
+            new JObject { ["input"] = JArray.FromObject(inputs) }, workingDirectory)!;
+        return ((JArray)normalized["input"]!).Cast<object>().ToArray();
     }
 
     internal static string BuildPromptText(string prompt, string ideContextSummary, string preferredMcpContext)

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.3.8 - 2026-10-23
+
+### Fixed
+- Image attachments from the picker, clipboard, drag-and-drop and classic composer now preserve actual image content. Binary reads expose the field expected by the shipped WebView; pasted filenames are no longer mistaken for filesystem paths (#25).
+- Structured image inputs are validated, deduplicated and converted to inline data for both new and steered turns. File signatures determine the media type, BMP is converted to PNG, and bounded reads prevent oversized attachments. Mentioning a filename in text does not upload it.
+- Missing CLI sign-in now offers installation with consent, respects custom executable paths, and never prompts during background startup probes (#24). Installer processes have bounded execution, cancellation and output, and refreshed PATH entries are deduplicated.
+- Automatic compaction uses the latest per-conversation usage, including zero. Lower usage, a new turn or disabling the setting cancels pending compaction; duplicate completions and cooldowns are respected (#23).
+- Updated the build-only MessagePack override to 3.1.9 for the strict dependency audit.
+
+### Validation
+- Passed 191 .NET tests and 8 behavior tests against the shipped WebView assets.
+- Passed locked dependency restore, strict NuGet auditing, Release packaging and installed-file integrity verification.
+- Installed and manually tested in Visual Studio 2026, with user acceptance before publication.
+
+### Contributors
+- Billy Martin (@BillyMartin1964): PR #26, the missing CLI report (#24), image investigation and proposed fixes adapted in this version.
+- @maghilum: image attachment report (#25).
+- @jtownzen-42: automatic compaction reproduction and initial fix suggestion (#23).
+- See [CONTRIBUTORS.md](CONTRIBUTORS.md) for links to the reports and incorporated contribution.
+
 ## 1.3.7 - 2026-09-30
 
 ### Changed

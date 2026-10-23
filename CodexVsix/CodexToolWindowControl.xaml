@@ -9,6 +9,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <ui:PathToFileNameConverter x:Key="PathToFileNameConverter" />
+        <ui:FilePathToImageSourceConverter x:Key="FilePathToImageSourceConverter" />
         <ui:ChatBubbleWidthConverter x:Key="ChatBubbleWidthConverter" />
         <ui:RecentHistoryMaxHeightConverter x:Key="RecentHistoryMaxHeightConverter" />
         <ui:ResponsivePanelWidthConverter x:Key="ResponsivePanelWidthConverter" />
@@ -4170,7 +4171,7 @@
                                             BorderThickness="1"
                                             CornerRadius="14">
                                         <Grid ClipToBounds="True">
-                                            <Image Source="{Binding}"
+                                            <Image Source="{Binding Converter={StaticResource FilePathToImageSourceConverter}}"
                                                    Stretch="UniformToFill" />
                                             <Border x:Name="AttachmentHoverMask"
                                                     Background="#00000000" />

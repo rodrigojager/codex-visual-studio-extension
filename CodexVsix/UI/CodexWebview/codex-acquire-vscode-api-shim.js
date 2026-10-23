@@ -774,7 +774,9 @@
             };
         },
         getPathForFile: function (file) {
-            return file && (file.path || file.fsPath || file.name) || null;
+            // Never fall back to file.name: a pasted image is called "image.png" and would be
+            // mistaken for a real local path, so the renderer would send a localImage reference.
+            return file && (file.path || file.fsPath) || null;
         },
         getSystemThemeVariant: getSystemThemeVariant,
         subscribeToSystemThemeVariant: function (listener) {

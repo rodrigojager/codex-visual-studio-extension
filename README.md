@@ -10,7 +10,7 @@ editor, theme, and user settings.
 Author: [Rodrigo Jager](https://rodrigojager.com). See the [changelog](CHANGELOG.md)
 for the changes and release history.
 
-Current release: [v1.3.7](https://github.com/rodrigojager/codex-visual-studio-extension/releases/tag/v1.3.7)
+Current release: [v1.3.8](https://github.com/rodrigojager/codex-visual-studio-extension/releases/tag/v1.3.8)
 
 > [!WARNING]
 > This project is not actively maintained. The 1.3.x updates were exceptional
@@ -24,18 +24,19 @@ Current release: [v1.3.7](https://github.com/rodrigojager/codex-visual-studio-ex
 > officially associated with OpenAI or ChatGPT. Logos and product references are
 > used only to describe the integration.
 
-## What's New in 1.3.7
+## What's New in 1.3.8
 
-- New name and community logo, with the author link at https://rodrigojager.com.
-- Automatic diff updates keep editor focus and only update an already open diff
-  for the same conversation.
-- Complete model discovery preserves model announcements and runtime capabilities;
-  the fallback catalog includes GPT-6.1 Sol, GPT-6 Astra, GPT-6 Sol, and GPT-6 Luna.
-- The chat selector displays and retains Max and Ultra when the selected model
-  supports them.
-- Custom-provider authentication respects the active profile and explicit runtime
-  decisions, and executable discovery supports native codex.exe installations.
-- Versioned WebView asset caching and packaged release notes improve upgrades.
+- Image attachments preserve their content when selected, pasted, or dropped into
+  the chat. Structured attachments are validated and sent inline to the runtime;
+  mentioning a filename in text does not upload it.
+- The classic composer can send an image without requiring accompanying text.
+- Starting sign-in with a missing CLI offers installation through npm with your
+  consent. Background startup checks never show an installation prompt, and an
+  explicitly configured executable path is preserved.
+- Automatic compaction uses the latest usage for each conversation and cancels
+  pending work when usage falls, another turn starts, or the setting is disabled.
+- Community fixes adapted from Billy Martin's PR #26 are documented in
+  [CONTRIBUTORS.md](CONTRIBUTORS.md), together with the issue reporters' credits.
 
 ## What It Provides
 
@@ -49,8 +50,8 @@ Current release: [v1.3.7](https://github.com/rodrigojager/codex-visual-studio-ex
   service tier, approval policy, and sandbox controls.
 - Streaming assistant output, tool activity, approvals, interactive questions,
   Markdown, diffs, and Mermaid diagrams.
-- Clipboard and file-picker image attachments sent as app-server `localImage`
-  inputs.
+- Clipboard and file-picker image attachments validated and sent as inline
+  app-server `image` inputs.
 - Session usage and rate-limit information when supplied by the Codex runtime.
 - Bounded local recent-task history instead of the incompatible cloud-task view.
 
@@ -126,6 +127,11 @@ The VSIX does not bundle the Codex CLI or an OpenAI account.
 If authentication is missing, the extension's Account settings can open the
 local `codex login` flow.
 
+If the default Codex command is missing when you start sign-in, the extension
+offers to run `npm install --global @openai/codex`. This requires Node.js/npm and
+your confirmation. If npm is unavailable, installation instructions are shown.
+An invalid custom executable path must be corrected in settings instead.
+
 ## Authentication and Local Data
 
 Authentication always belongs to the Windows user running Visual Studio. The
@@ -161,6 +167,9 @@ the files before sharing them publicly.
   advanced per-user settings. They are passed to the local runtime and should be
   reviewed before use.
 - Attached local images must remain readable until the turn starts.
+- Image attachments support PNG, JPEG, GIF, still WebP, and BMP (converted to
+  PNG), with limits of 20 MiB per image, 40 MiB total per turn, and 25 megapixels
+  per image. The modern picker classifies PNG, JPEG, GIF, and WebP as images.
 - The embedded WebView is a frozen bundle. A future Codex CLI or protocol change
   may require source changes that this unmaintained project will not receive.
 
@@ -209,6 +218,14 @@ are configured; otherwise the workflow publishes a verified unsigned package.
 Visual Studio Marketplace publication is intentionally manual.
 
 ## Changelog
+
+### 1.3.8 - 2026-10-23
+
+- Fixed image attachment transport and image-only submissions in the classic composer.
+- Added consent-based CLI installation at sign-in, with bounded execution and custom-path protection.
+- Fixed stale automatic compaction decisions and cancellation between turns.
+- Validated with 191 .NET tests, 8 WebView tests, package checks, and local Visual Studio acceptance.
+- Credited Billy Martin (@BillyMartin1964), @maghilum, and @jtownzen-42 in the changelog and packaged [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
 ### 1.3.7 - 2026-09-30
 
@@ -300,6 +317,7 @@ change list.
 - `scripts/Set-VsixVersion.ps1`: synchronized version updater.
 - `marketplace/overview.md`: Marketplace-facing product description.
 - `THIRD-PARTY-NOTICES.md`: bundled third-party notices and reviewed asset hashes.
+- `CONTRIBUTORS.md`: credits for community reports and incorporated fixes.
 
 ## License and Third-Party Code
 

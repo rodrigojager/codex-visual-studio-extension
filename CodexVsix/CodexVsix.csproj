@@ -117,7 +117,7 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
     <!-- Keep this aligned with the Newtonsoft.Json API surface hosted by supported Visual Studio versions. -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="MessagePack" Version="3.1.8" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="MessagePack" Version="3.1.9" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>
@@ -137,6 +137,9 @@
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
     <Content Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="..\CONTRIBUTORS.md" Link="CONTRIBUTORS.md">
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
     <EmbeddedResource Include="UI\Assets\mermaid.min.js">

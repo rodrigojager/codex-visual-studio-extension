@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <Metadata>
-    <Identity Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61" Version="1.3.7" Language="en-US" Publisher="Rodrigo Jager" />
+    <Identity Id="CodexVsix.A0B554A1-1D5E-4EC3-8CA9-0A7994B64A61" Version="1.3.8" Language="en-US" Publisher="Rodrigo Jager" />
     <DisplayName>Codex Community Connector</DisplayName>
     <Description xml:space="preserve">Codex Community Connector connects your local Codex CLI to Visual Studio 2022 and 2026, with docked chat, approvals, image attachments, and solution-aware context. An independent community project by Rodrigo Jager, not affiliated with, endorsed by, or officially associated with OpenAI or ChatGPT.</Description>
     <MoreInfo>https://rodrigojager.com</MoreInfo>

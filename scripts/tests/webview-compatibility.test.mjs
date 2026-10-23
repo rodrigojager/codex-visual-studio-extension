@@ -3,9 +3,65 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
+const shimSource = fs.readFileSync(new URL('../../CodexVsix/UI/CodexWebview/codex-acquire-vscode-api-shim.js', import.meta.url), 'utf8');
+const pathAccessor = shimSource.match(/getPathForFile:\s*(function\s*\(file\)\s*\{[\s\S]*?\n\s*\})/);
+assert.ok(pathAccessor, 'Locate the shipped clipboard/drop path adapter');
+const getPathForFile = vm.runInNewContext('(' + pathAccessor[1] + ')');
+
 const assets = new URL('../../CodexVsix/UI/CodexWebview/webview/assets/', import.meta.url);
 const source = name => fs.readFileSync(new URL(name, assets), 'utf8');
 const composer = source('composer-B3BCMq_W.js');
+
+const managerSource = source('app-server-manager-signals-B8yJv95l.js');
+const imageStart = managerSource.indexOf('function fl(');
+const imageEnd = managerSource.indexOf('function pl(', imageStart);
+assert.ok(imageStart >= 0 && imageEnd > imageStart);
+const imageTransport = vm.createContext({});
+vm.runInContext(managerSource.slice(imageStart, imageEnd), imageTransport);
+
+test('pasted images use their pixel data, never a filename as a local path', () => {
+  const dataUrl = 'data:image/png;base64,AQID';
+  const path = getPathForFile({ name: 'image.png', type: 'image/png' });
+  assert.equal(path, null);
+  const input = imageTransport.fl(dataUrl, { localPath: path });
+  assert.equal(input.type, 'image');
+  assert.equal(input.url, dataUrl);
+  assert.equal(getPathForFile({ fsPath: 'D:\\fotos\\ação.png' }), 'D:\\fotos\\ação.png');
+  assert.equal(getPathForFile(null), null);
+});
+
+test('the shipped picker classifies and reads images instead of attaching text mentions', async () => {
+  const shared = source('src-DqZHIysr.js');
+  const start = shared.indexOf('xm=[`png`');
+  const end = shared.indexOf('function Em(', start);
+  assert.ok(start >= 0 && end > start);
+  const classifier = vm.createContext({});
+  vm.runInContext('var ' + shared.slice(start, end), classifier);
+  const pickerSource = source('thread-side-panel-tabs-Des13tNg.js');
+  const pickerStart = pickerSource.indexOf('function cd(e){let t=[],n=[];');
+  const pickerEnd = pickerSource.indexOf('var md=', pickerStart);
+  assert.ok(pickerStart >= 0 && pickerEnd > pickerStart);
+  const png = { label: 'ação 中文.png', path: 'D:/fotos/ação 中文.png', fsPath: 'D:/fotos/ação 中文.png' };
+  const text = { label: 'notes.txt', path: 'D:/notes.txt', fsPath: 'D:/notes.txt' };
+  const picker = vm.createContext({
+    _: classifier.wm, F: 'local', rd: { lookup: () => 'image/png' },
+    De: async (method, { params }) => {
+      assert.equal(method, 'read-file-binary');
+      assert.equal(params.path, png.fsPath);
+      return { contentsBase64: 'AQID' };
+    },
+  });
+  vm.runInContext(pickerSource.slice(pickerStart, pickerEnd), picker);
+  const classified = picker.cd([png, text]);
+  assert.equal(classified.images.length, 1);
+  assert.equal(classified.others[0], text);
+  const attachment = await picker.fd(classified.images[0]);
+  assert.equal(attachment.dataUrl, 'data:image/png;base64,AQID');
+  assert.equal(attachment.filename, png.label);
+  const input = imageTransport.fl(attachment.dataUrl, { localPath: attachment.localPath });
+  assert.equal(input.type, 'localImage');
+  assert.equal(input.path, png.fsPath); // The host's tested normalizer supplies the bytes.
+});
 const labelsStart = composer.indexOf('function tg(');
 const labelsEnd = composer.indexOf('var ng=', labelsStart);
 assert.ok(labelsStart >= 0 && labelsEnd > labelsStart, 'Locate the shipped reasoning formatter');

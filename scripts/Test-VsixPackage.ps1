@@ -44,6 +44,7 @@ try {
         "Microsoft.Web.WebView2.Wpf.dll",
         "LICENSE",
         "THIRD-PARTY-NOTICES.md",
+        "CONTRIBUTORS.md",
         "Resources\MarketplaceIcon.png",
         "UI\CodexWebview\webview\index.html",
         "UI\CodexWebview\codex-acquire-vscode-api-shim.js",
